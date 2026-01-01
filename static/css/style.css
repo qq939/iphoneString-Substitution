@@ -72,12 +72,29 @@ button {
     padding: 2px 10px;
     margin-left: 5px;
     font-weight: bold;
+    min-width: 30px;
+    text-align: center;
 }
 
 button:hover {
     background: var(--bg-color);
     color: var(--text-color);
     box-shadow: 0 0 5px var(--text-color);
+}
+
+/* Specific styles for + and - */
+button[value="add"] {
+    background: #0f0;
+    color: #000;
+}
+button[value="remove"] {
+    background: #f00;
+    color: #000;
+    border-color: #f00;
+}
+button[value="remove"]:hover {
+    color: #f00;
+    box-shadow: 0 0 5px #f00;
 }
 
 .output-area {
