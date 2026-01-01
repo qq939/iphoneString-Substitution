@@ -43,13 +43,25 @@ def index():
     substitutions = get_substitutions()
     return render_template('index.html', substitutions=substitutions)
 
+# 模拟你的替换规则函数（示例）
+def get_substitutions():
+    # 示例：要移除的特殊字符列表
+    return ['!', '@', '#', '$', '%']
+
 @app.route('/replace', methods=['POST'])
 def replace():
+    # 1. 显式指定请求编码为UTF-8，避免接收中文乱码
+    request.charset = 'utf-8'
+    # 获取参数并解码（双重保障）
+    text = request.form.get('text', '', type=urllib.parse.unquote)
     
-    text = request.form.get('text', '')
+    # 2. 执行替换逻辑（你的原有代码）
     substitutions = get_substitutions()
     for char in substitutions:
         text = text.replace(char, '')
+    
+    # 3. 显式指定响应编码为UTF-8，解决返回中文乱码
+    # 核心：Content-Type添加charset=utf-8
     return text
 
 if __name__ == '__main__':
