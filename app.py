@@ -43,10 +43,10 @@ def index():
     substitutions = get_substitutions()
     return render_template('index.html', substitutions=substitutions)
 
-@app.route('/replace', methods=['GET'])
+@app.route('/replace', methods=['POST'])
 def replace():
     
-    text = request.args.get('text', '')
+    text = request.form.get('text', '')
     substitutions = get_substitutions()
     for char in substitutions:
         text = text.replace(char, '')
