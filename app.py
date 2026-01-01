@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for
 import os
 
 app = Flask(__name__)
-SUBSTITUTION_FILE = 'substitution.txt'
+SUBSTITUTION_FILE = 'langchain/substitution.txt'
 
 def get_substitutions():
     if not os.path.exists(SUBSTITUTION_FILE):
