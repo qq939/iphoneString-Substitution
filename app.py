@@ -44,10 +44,7 @@ def index():
     substitutions = get_substitutions()
     return render_template('index.html', substitutions=substitutions)
 
-# 模拟你的替换规则函数（示例）
-def get_substitutions():
-    # 示例：要移除的特殊字符列表
-    return ['!', '@', '#', '$', '%']
+
 
 @app.route('/replace', methods=['POST'])
 def replace():
