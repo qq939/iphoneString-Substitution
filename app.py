@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, Response
 import os
 import urllib
 
@@ -51,19 +51,30 @@ def get_substitutions():
 
 @app.route('/replace', methods=['POST'])
 def replace():
-    # 1. 显式指定请求编码为UTF-8，避免接收中文乱码
-    request.charset = 'utf-8'
-    # 获取参数并解码（双重保障）
-    text = request.form.get('text', '', type=urllib.parse.unquote)
-    
-    # 2. 执行替换逻辑（你的原有代码）
+    # ========== 关键修复1：解析原始请求体，保留换行符 ==========
+    # 读取原始POST数据（避免form解析过滤换行符）
+    raw_data = request.data.decode('utf-8')
+    # 解析URL编码的参数（text=xxx格式）
+    parsed_data = urllib.parse.parse_qs(raw_data)
+    # 获取text参数，保留原始换行符（取第一个值）
+    text = parsed_data.get('text', [''])[0]
+
+    # ========== 原有替换逻辑 ==========
     substitutions = get_substitutions()
     for char in substitutions:
         text = text.replace(char, '')
-    
-    # 3. 显式指定响应编码为UTF-8，解决返回中文乱码
-    # 核心：Content-Type添加charset=utf-8
-    return text
+
+    # ========== 关键修复2：显式指定响应编码+保留换行符 ==========
+    # Response返回，强制UTF-8编码，保留换行符
+    return Response(
+        response=text,
+        status=200,
+        headers={
+            'Content-Type': 'text/plain; charset=utf-8',  # 解决乱码核心
+            'X-Content-Type-Options': 'nosniff'  # 防止浏览器自动解析编码
+        }
+    )
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5015)
