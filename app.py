@@ -12,8 +12,11 @@ def get_substitutions():
         return f.read()
 
 def save_substitution(char):
-    with open(SUBSTITUTION_FILE, 'a', encoding='utf-8') as f:
-        f.write(char)
+    with open(SUBSTITUTION_FILE, 'w', encoding='utf-8') as f:
+        strings = f.read()
+        stringset = set(strings)
+        stringset.add(char)
+        f.write(''.join(stringset))
 
 def remove_substitution(char):
     if not os.path.exists(SUBSTITUTION_FILE):
