@@ -43,5 +43,14 @@ def index():
     substitutions = get_substitutions()
     return render_template('index.html', substitutions=substitutions)
 
+@app.route('/replace', methods=['GET'])
+def replace():
+    
+    text = request.args.get('text', '')
+    substitutions = get_substitutions()
+    for char in substitutions:
+        text = text.replace(char, '')
+    return text
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5015)
