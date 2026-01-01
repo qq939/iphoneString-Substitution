@@ -1,0 +1,121 @@
+:root {
+    --bg-color: #000;
+    --text-color: #0f0;
+    --border-color: #003300; /* Darker green for grid lines */
+    --active-border: #0f0;
+    --font-family: 'Courier New', Courier, monospace;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    height: 100vh;
+    overflow: hidden;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    height: 100vh;
+    width: 100vw;
+    border: 1px solid var(--border-color);
+}
+
+.grid-item {
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 0.3s, border-color 0.3s;
+}
+
+.grid-item:hover {
+    box-shadow: 0 0 10px var(--text-color) inset;
+    border-color: var(--active-border);
+    z-index: 1;
+}
+
+.grid-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Hacker Style Input */
+input[type="text"] {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    font-size: 1.2rem;
+    outline: none;
+    width: 70%;
+}
+
+button {
+    background: var(--text-color);
+    color: var(--bg-color);
+    border: 1px solid var(--text-color);
+    font-family: var(--font-family);
+    cursor: pointer;
+    padding: 2px 10px;
+    margin-left: 5px;
+    font-weight: bold;
+}
+
+button:hover {
+    background: var(--bg-color);
+    color: var(--text-color);
+    box-shadow: 0 0 5px var(--text-color);
+}
+
+.output-area {
+    margin-top: 20px;
+    flex-grow: 1;
+    overflow-y: auto;
+    border-top: 1px dashed var(--text-color);
+    padding-top: 10px;
+}
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+    width: 5px;
+}
+::-webkit-scrollbar-track {
+    background: #000;
+}
+::-webkit-scrollbar-thumb {
+    background: #0f0;
+}
+
+.substitution-content {
+    word-break: break-all;
+    font-size: 1.1rem;
+    line-height: 1.5;
+    text-shadow: 0 0 2px var(--text-color);
+}
+
+h2, h3 {
+    margin-top: 0;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 5px;
+    font-size: 1rem;
+}
+
+/* Placeholder style */
+.placeholder {
+    opacity: 0.3;
+    font-size: 0.8rem;
+}

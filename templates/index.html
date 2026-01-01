@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacker Grid</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="grid-container">
+        <!-- 格子 1 -->
+        <div class="grid-item item-1">
+            <div class="grid-content">
+                <h2>字符替换</h2>
+                <form method="POST" action="/">
+                    <div class="input-group">
+                        <input type="text" name="text" placeholder=">_" autocomplete="off" autofocus>
+                        <button type="submit">EXEC</button>
+                    </div>
+                </form>
+                <div class="output-area">
+                    <h3>BUFFER:</h3>
+                    <div class="substitution-content">
+                        {{ substitutions }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 其他 15 个格子占位 -->
+        {% for i in range(2, 17) %}
+        <div class="grid-item item-{{ i }}">
+            <div class="grid-content">
+                <span class="placeholder">SECTOR {{ "%02d"|format(i) }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

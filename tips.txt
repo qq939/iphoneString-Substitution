@@ -1,0 +1,17 @@
+# Mac VSCode Tips
+
+## 常用快捷键
+- **Command + P**: 快速打开文件
+- **Command + Shift + P**: 打开命令面板
+- **Command + /**: 注释/取消注释代码
+- **Command + B**: 切换侧边栏可见性
+- **Option + Click**: 多光标编辑
+- **Option + Up/Down**: 移动当前行
+
+## 代码补全
+- **Tab**: 接受建议的补全
+- **Control + Space**: 触发代码建议
+- **Enter**: 插入建议
+
+## 终端
+- **Control + `**: 切换终端面板
