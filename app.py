@@ -48,25 +48,34 @@ def index():
     return render_template('index.html', substitutions=substitutions)
 
 
-
 @app.route('/replace', methods=['POST'])
 def replace():
-    # ========== 关键修复1：解析原始请求体，保留换行符 ==========
-    # 读取原始POST数据（避免form解析过滤换行符）
-    raw_data = request.data.decode('utf-8')
-    # 解析URL编码的参数（text=xxx格式）
-    parsed_data = urllib.parse.parse_qs(raw_data)
-    # 获取text参数，保留原始换行符（取第一个值）
-    text = parsed_data.get('text', [''])[0]
+    # ========== 核心修改：解析JSON数据 ==========
+    try:
+        # 直接解析JSON请求体，自动保留换行符/中文
+        json_data = request.get_json(force=True, encoding='utf-8')
+        # 获取text参数（默认空字符串）
+        text = json_data.get('text', '')
+    except Exception as e:
+        # 解析失败时返回错误
+        return Response(
+            response="请传入JSON格式数据",
+            status=400,
+            mimetype='text/plain; charset=utf-8'
+        )
 
     # ========== 原有替换逻辑 ==========
     substitutions = get_substitutions()
     for char in substitutions:
         text = text.replace(char, '')
-    print(text)
-    # ========== 关键修复2：显式指定响应编码+保留换行符 ==========
-    # Response返回，强制UTF-8编码，保留换行符
-    return text
+    print(text, flush=True)
+
+    # 方案1：返回纯文本（适配Shortcuts直接取文本）【推荐】
+    return Response(
+        response=text,
+        status=200,
+        mimetype='text/plain; charset=utf-8'
+    )
 
 
 if __name__ == '__main__':
