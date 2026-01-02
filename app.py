@@ -63,17 +63,10 @@ def replace():
     substitutions = get_substitutions()
     for char in substitutions:
         text = text.replace(char, '')
-
+    print(text)
     # ========== 关键修复2：显式指定响应编码+保留换行符 ==========
     # Response返回，强制UTF-8编码，保留换行符
-    return Response(
-        response=text,
-        status=200,
-        headers={
-            'Content-Type': 'text/plain; charset=utf-8',  # 解决乱码核心
-            'X-Content-Type-Options': 'nosniff'  # 防止浏览器自动解析编码
-        }
-    )
+    return text
 
 
 if __name__ == '__main__':
