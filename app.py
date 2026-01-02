@@ -53,7 +53,7 @@ def replace():
     # ========== 核心修改：解析JSON数据 ==========
     try:
         # 直接解析JSON请求体，自动保留换行符/中文
-        json_data = request.get_json(force=True, encoding='utf-8')
+        json_data = request.get_json(force=True)
         # 获取text参数（默认空字符串）
         text = json_data.get('text', '')
     except Exception as e:
