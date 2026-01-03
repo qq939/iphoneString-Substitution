@@ -13,8 +13,9 @@ def get_substitutions():
         return f.read()
 
 def save_substitution(char):
-    with open(SUBSTITUTION_FILE, 'r+', encoding='utf-8') as f:
+    with open(SUBSTITUTION_FILE, 'r', encoding='utf-8') as f:
         strings = f.read()
+    with open(SUBSTITUTION_FILE, 'w', encoding='utf-8') as f:
         stringset = set(strings)
         stringset.add(char)
         f.write(''.join(stringset))
