@@ -49,6 +49,24 @@ def index():
     substitutions = get_substitutions()
     return render_template('index.html', substitutions=substitutions)
 
+def core_replace(text):
+    # ========== 直接硬编码替换字符串，写在这里 ==========
+    hard_encoded = ["登录领番茄.*", 
+                    "继续播放.*",
+                    r"\d{2}:\d{2}.*", 
+                    r"[０-９\d]*[／/][０-９\d]{3,5}.*", 
+                    r"原进度\d*从本页听"]
+    # 遍历所有替换规则
+    for pattern in hard_encoded:
+        # 用正则替换（re.sub 支持正则，且忽略换行/多行匹配）
+        text = re.sub(pattern, "", text, flags=re.MULTILINE)
+
+    # ========== 原有替换逻辑 ==========
+    substitutions = get_substitutions()
+    for char in substitutions:
+        text = text.replace(char, '')
+    return text
+
 
 @app.route('/replace', methods=['POST'])
 def replace():
@@ -66,23 +84,9 @@ def replace():
             status=400,
             mimetype='text/plain; charset=utf-8'
         )
-
-    # ========== 直接硬编码替换字符串，写在这里 ==========
-    hard_encoded = ["登陆领番茄.*", 
-                    "继续播放.*",
-                    r"\d{2}:\d{2}.*", 
-                    r"[０-９\d]*[／/][０-９\d]{3,5}.*", 
-                    r"原进度\d*从本页听"]
-    # 遍历所有替换规则
-    for pattern in hard_encoded:
-        # 用正则替换（re.sub 支持正则，且忽略换行/多行匹配）
-        text = re.sub(pattern, "", text, flags=re.MULTILINE)
-
-    # ========== 原有替换逻辑 ==========
-    substitutions = get_substitutions()
-    for char in substitutions:
-        text = text.replace(char, '')
-    
+    print("原始文本:\n",text,flush=True)
+    text = core_replace(text)
+    print("替换后文本:\n",text,flush=True)
 
     # 方案1：返回纯文本（适配Shortcuts直接取文本）【推荐】
     return Response(
