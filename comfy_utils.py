@@ -32,8 +32,8 @@ class ComfyUIClient:
         else:
             self.servers = ["127.0.0.1:8188"]
             
-        self.server_address = self._find_active_server()
-        logger.info(f"ComfyUIClient initialized with server: {self.server_address}")
+        self.server_address = self.servers[0] # Default to first server, discover later
+        logger.info(f"ComfyUIClient initialized with default server: {self.server_address}")
 
     def _find_active_server(self):
         """
