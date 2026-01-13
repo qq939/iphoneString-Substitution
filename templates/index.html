@@ -11,8 +11,8 @@
         <!-- 格子 1 -->
         <div class="grid-item item-1">
             <div class="grid-controls">
-                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
                 <h2>字符替换</h2>
@@ -35,8 +35,8 @@
         <!-- 格子 2 -->
         <div class="grid-item item-2">
             <div class="grid-controls">
-                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
                 <h2>视频切片换人</h2>
@@ -51,8 +51,8 @@
         <!-- 格子 3: 结果展示 -->
         <div class="grid-item item-3">
             <div class="grid-controls">
-                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
                 <span class="placeholder">SECTOR 03 (OUTPUT)</span>
@@ -62,8 +62,8 @@
         <!-- 格子 4: 角色上传 -->
         <div class="grid-item item-4">
             <div class="grid-controls">
-                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
                 <h2>角色配置</h2>
@@ -85,8 +85,8 @@
         {% for i in range(5, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-controls">
-                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
                 <span class="placeholder">SECTOR {{ "%02d"|format(i) }}</span>

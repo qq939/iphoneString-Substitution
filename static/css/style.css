@@ -144,13 +144,26 @@ h2, h3 {
     right: 5px;
     display: flex;
     gap: 5px;
-    z-index: 10;
+    z-index: 10000; /* Ensure it is above fullscreen content */
     opacity: 0; /* Hidden by default */
     transition: opacity 0.3s;
 }
 
 .grid-item:hover .grid-controls {
     opacity: 1;
+}
+
+/* Control Buttons Visibility Logic */
+.control-btn-back {
+    display: none;
+}
+
+.grid-item.fullscreen .control-btn-full {
+    display: none;
+}
+
+.grid-item.fullscreen .control-btn-back {
+    display: block;
 }
 
 .control-btn {
