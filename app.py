@@ -282,7 +282,7 @@ def monitor_group_task(group_id):
                     final_clip = concatenate_videoclips(clips)
                     output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
                     output_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                    final_clip.write_videofile(output_path, codec='libx264', audio_codec='aac')
+                    final_clip.write_videofile(output_path, codec='libx264', audio=False)
                     
                     # Close clips
                     final_clip.close()
@@ -384,8 +384,7 @@ def upload_and_cut():
             subclip.write_videofile(
                 segment_path, 
                 codec='libx264', 
-                audio_codec='aac', 
-                temp_audiofile=os.path.join(UPLOAD_FOLDER, f"temp-audio-{i}-{group_id}.m4a"), 
+                audio=False, # Disable audio to avoid MoviePy errors and sync issues
                 remove_temp=True,
                 preset='ultrafast',
                 logger=None # Silence output
