@@ -21,3 +21,6 @@
 
 ## 2026-01-13 [Current Time]
 **User:** back就是返回16格子的状态，当前还不能用，修复一下。
+
+## 2026-01-13 [Current Time]
+**User:** 重新梳理逻辑。视频切片换人直接和ComfyUI对接，不再通过videocut.dimond.top/overall了。
