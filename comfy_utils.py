@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class ComfyUIClient:
-    def __init__(self, server_address=["192.168.50.210:7860", "192.168.0.210:7860"]):
+    def __init__(self, server_address=["192.168.0.210:7860", "192.168.50.210:7860"]):
         self.client_id = str(uuid.uuid4())
         self.ws = None
         
