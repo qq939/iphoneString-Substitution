@@ -68,23 +68,52 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    let msg = 'SEQUENCE COMPLETED.\n';
-                    if (result.results) {
-                        msg += `SEGMENTS: ${result.results.length}\n`;
-                        // Simple status
-                        const successCount = result.results.filter(r => r.status_code === 200).length;
-                        msg += `SUCCESS: ${successCount}/${result.results.length}`;
-                    }
-                    statusDiv.innerText = msg;
-                } else {
-                    statusDiv.innerText = 'ERROR: ' + (result.error || 'Unknown');
-                }
-            } catch (err) {
-                statusDiv.innerText = 'SYSTEM FAILURE: ' + err.message;
-            } finally {
-                btn.disabled = false;
-            }
-        };
+                     statusDiv.innerText = 'UPLOAD SUCCESS. PROCESSING SEQUENCE INITIATED...';
+                     
+                     // Start polling
+                     const groupId = result.group_id;
+                     const pollInterval = setInterval(async () => {
+                         try {
+                             const statusRes = await fetch(`/check_group_status/${groupId}`);
+                             const statusData = await statusRes.json();
+                             
+                             if (statusData.status === 'processing') {
+                                 statusDiv.innerText = `PROCESSING... [${statusData.progress}]`;
+                             } else if (statusData.status === 'completed') {
+                                 clearInterval(pollInterval);
+                                 statusDiv.innerText = 'SEQUENCE COMPLETED.\nESTABLISHING LINK TO SECTOR 03...';
+                                 btn.disabled = false;
+                                 
+                                 // Display video in Sector 03
+                                 const grid3 = document.querySelector('.item-3 .grid-content');
+                                 grid3.innerHTML = `
+                                     <h2>OUTPUT FEED</h2>
+                                     <video controls autoplay loop style="width: 100%; max-height: 200px; border: 1px solid #00ff00; background: #000;">
+                                         <source src="${statusData.final_url}" type="video/mp4">
+                                         Your browser does not support the video tag.
+                                     </video>
+                                     <div style="margin-top: 5px; font-size: 0.7em; word-break: break-all;">${statusData.final_url}</div>
+                                 `;
+                             } else {
+                                 clearInterval(pollInterval);
+                                 statusDiv.innerText = 'FAILED: ' + (statusData.error || 'Unknown error');
+                                 btn.disabled = false;
+                             }
+                         } catch (e) {
+                             console.error(e);
+                             // Don't stop polling on transient network errors, but maybe show warning?
+                         }
+                     }, 2000);
+                     
+                 } else {
+                     statusDiv.innerText = 'ERROR: ' + (result.error || 'Unknown');
+                     btn.disabled = false;
+                 }
+             } catch (err) {
+                 statusDiv.innerText = 'SYSTEM FAILURE: ' + err.message;
+                 btn.disabled = false;
+             }
+         };
     </script>
 </body>
 </html>

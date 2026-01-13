@@ -4,17 +4,38 @@ import re
 import urllib
 import requests
 import math
-from moviepy import VideoFileClip
+import uuid
+import threading
+import time
+import shutil
+from datetime import datetime
+from moviepy import VideoFileClip, concatenate_videoclips
+import comfy_utils
+import obs_utils
 
 app = Flask(__name__)
 SUBSTITUTION_FILE = 'langchain/substitution.txt'
 
 # Video Cut Config
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
-TARGET_URL = "http://videocut.dimond.top/overall"
+# TARGET_URL = "http://videocut.dimond.top/overall" # Deprecated
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+
+# In-memory store for task groups
+# Structure:
+# {
+#   "group_id": {
+#       "status": "processing" | "completed" | "failed",
+#       "tasks": [
+#           {"task_id": "xxx", "status": "pending" | "completed" | "failed", "segment_index": 0, "result_path": "path/to/file"}
+#       ],
+#       "final_url": "http://...",
+#       "error": "..."
+#   }
+# }
+TASKS_STORE = {}
 
 def get_substitutions():
     if not os.path.exists(SUBSTITUTION_FILE):
@@ -105,6 +126,119 @@ def replace():
         mimetype='text/plain; charset=utf-8'
     )
 
+def monitor_group_task(group_id):
+    """
+    Background thread to monitor task status.
+    """
+    print(f"Starting monitor for group {group_id}")
+    group_data = TASKS_STORE.get(group_id)
+    if not group_data:
+        print(f"Group {group_id} not found")
+        return
+
+    while True:
+        all_done = True
+        any_failed = False
+        
+        # Check each task
+        for task in group_data['tasks']:
+            if task['status'] == 'completed':
+                continue
+            
+            if task['status'] == 'failed':
+                any_failed = True
+                continue
+                
+            # Check status from ComfyUI
+            try:
+                status, result = comfy_utils.check_status(task['task_id'])
+                print(f"Task {task['task_id']} status: {status}")
+                
+                if status == 'SUCCEEDED':
+                    # Download result
+                    if isinstance(result, dict):
+                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+                        if local_path:
+                            task['result_path'] = local_path
+                            task['status'] = 'completed'
+                        else:
+                            task['status'] = 'failed'
+                            task['error'] = 'Download failed'
+                            any_failed = True
+                    else:
+                        task['status'] = 'failed'
+                        task['error'] = 'Invalid result format'
+                        any_failed = True
+                        
+                elif status == 'FAILED':
+                    task['status'] = 'failed'
+                    task['error'] = str(result)
+                    any_failed = True
+                else:
+                    # PENDING or RUNNING
+                    all_done = False
+            except Exception as e:
+                print(f"Error checking task {task['task_id']}: {e}")
+                # Don't mark as failed immediately, maybe network glitch?
+                # But for now let's not block forever
+                # task['status'] = 'failed'
+                # task['error'] = str(e)
+                # any_failed = True
+                all_done = False
+        
+        if any_failed:
+            group_data['status'] = 'failed'
+            group_data['error'] = 'One or more tasks failed'
+            print(f"Group {group_id} failed")
+            break
+            
+        if all_done:
+            print(f"Group {group_id} all tasks done. Concatenating...")
+            # Concatenate videos
+            try:
+                # Sort by segment index
+                sorted_tasks = sorted(group_data['tasks'], key=lambda x: x['segment_index'])
+                clips = []
+                for t in sorted_tasks:
+                    if t['result_path'] and os.path.exists(t['result_path']):
+                        clips.append(VideoFileClip(t['result_path']))
+                
+                if clips:
+                    final_clip = concatenate_videoclips(clips)
+                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
+                    output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                    final_clip.write_videofile(output_path, codec='libx264', audio_codec='aac')
+                    
+                    # Close clips
+                    final_clip.close()
+                    for c in clips:
+                        c.close()
+                    
+                    # Upload to OBS
+                    print(f"Uploading {output_path} to OBS...")
+                    obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
+                    
+                    if obs_url:
+                        group_data['final_url'] = obs_url
+                        group_data['status'] = 'completed'
+                    else:
+                        group_data['status'] = 'failed'
+                        group_data['error'] = 'OBS upload failed'
+                else:
+                    group_data['status'] = 'failed'
+                    group_data['error'] = 'No clips to concatenate'
+                    
+            except Exception as e:
+                print(f"Concatenation error: {e}")
+                group_data['status'] = 'failed'
+                group_data['error'] = str(e)
+            
+            print(f"Group {group_id} finished with status {group_data['status']}")
+            break
+            
+        # Wait 30 seconds
+        time.sleep(30)
+
 @app.route('/upload_and_cut', methods=['POST'])
 def upload_and_cut():
     if 'video' not in request.files:
@@ -119,7 +253,20 @@ def upload_and_cut():
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(file_path)
     
-    results = []
+    # Use default character image if not provided (assuming lulu.webp exists)
+    character_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'face', 'lulu.webp')
+    if not os.path.exists(character_path):
+        # Fallback or error? For now try to use a placeholder or fail
+        pass 
+        # Actually submit_job requires a file. If lulu.webp is missing, this will fail.
+        # But we copied it in previous step.
+    
+    group_id = str(uuid.uuid4())
+    TASKS_STORE[group_id] = {
+        'status': 'processing',
+        'tasks': [],
+        'created_at': time.time()
+    }
     
     try:
         # Load video
@@ -138,38 +285,41 @@ def upload_and_cut():
             subclip = clip.subclipped(start_time, end_time)
             
             # Generate segment filename
-            segment_filename = f"segment_{i}_{filename}"
+            segment_filename = f"segment_{i}_{group_id}.mp4"
             segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
             
             # Write segment to file
-            # Use ultrafast preset for speed, libx264 for compatibility
             subclip.write_videofile(
                 segment_path, 
                 codec='libx264', 
                 audio_codec='aac', 
-                temp_audiofile=os.path.join(UPLOAD_FOLDER, f"temp-audio-{i}.m4a"), 
+                temp_audiofile=os.path.join(UPLOAD_FOLDER, f"temp-audio-{i}-{group_id}.m4a"), 
                 remove_temp=True,
                 preset='ultrafast',
                 logger=None # Silence output
             )
             
-            # Post to target URL
-            try:
-                with open(segment_path, 'rb') as f:
-                    files = {'video': (segment_filename, f, 'video/mp4')}
-                    response = requests.post(TARGET_URL, files=files)
-                    results.append({
-                        'segment': i,
-                        'status_code': response.status_code,
-                        'response': response.json() if response.content else None
-                    })
-            except Exception as req_e:
-                results.append({
-                    'segment': i,
-                    'error': str(req_e)
-                })
+            # Submit to ComfyUI
+            # We use comfy_utils.submit_job which handles uploading files and queuing workflow
+            prompt_id, error = comfy_utils.submit_job(character_path, segment_path)
             
-            # Clean up segment file
+            if prompt_id:
+                TASKS_STORE[group_id]['tasks'].append({
+                    'task_id': prompt_id,
+                    'status': 'pending',
+                    'segment_index': i,
+                    'result_path': None
+                })
+            else:
+                # If one fails, fail the whole group? Or continue?
+                # For now fail immediately
+                TASKS_STORE[group_id]['status'] = 'failed'
+                TASKS_STORE[group_id]['error'] = f"Failed to submit segment {i}: {error}"
+                clip.close()
+                return jsonify({'error': f"Failed to submit segment {i}: {error}"}), 500
+            
+            # Clean up segment file (optional, but submit_job uploads it so we can delete local)
+            # comfy_utils.submit_job reads the file. After return it's done.
             if os.path.exists(segment_path):
                 os.remove(segment_path)
                 
@@ -179,13 +329,38 @@ def upload_and_cut():
         if os.path.exists(file_path):
             os.remove(file_path)
             
-        return jsonify({'status': 'processed', 'results': results})
+        # Start background monitor
+        thread = threading.Thread(target=monitor_group_task, args=(group_id,))
+        thread.daemon = True
+        thread.start()
+            
+        return jsonify({
+            'status': 'processing', 
+            'group_id': group_id, 
+            'message': f'Started processing {num_segments} segments'
+        })
 
     except Exception as e:
         # Clean up original file if error
         if 'file_path' in locals() and os.path.exists(file_path):
             os.remove(file_path)
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = str(e)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/check_group_status/<group_id>', methods=['GET'])
+def check_group_status(group_id):
+    group_data = TASKS_STORE.get(group_id)
+    if not group_data:
+        return jsonify({'error': 'Group not found'}), 404
+    
+    response = {
+        'status': group_data.get('status'),
+        'final_url': group_data.get('final_url'),
+        'error': group_data.get('error'),
+        'progress': f"{len([t for t in group_data['tasks'] if t['status'] == 'completed'])}/{len(group_data['tasks'])}"
+    }
+    return jsonify(response)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5015)
