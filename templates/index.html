@@ -10,6 +10,10 @@
     <div class="grid-container">
         <!-- 格子 1 -->
         <div class="grid-item item-1">
+            <div class="grid-controls">
+                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
             <div class="grid-content">
                 <h2>字符替换</h2>
                 <form method="POST" action="/">
@@ -30,6 +34,10 @@
         
         <!-- 格子 2 -->
         <div class="grid-item item-2">
+            <div class="grid-controls">
+                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
             <div class="grid-content">
                 <h2>视频切片换人</h2>
                 <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
@@ -42,6 +50,10 @@
 
         <!-- 格子 3: 结果展示 -->
         <div class="grid-item item-3">
+            <div class="grid-controls">
+                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
             <div class="grid-content">
                 <span class="placeholder">SECTOR 03 (OUTPUT)</span>
             </div>
@@ -49,6 +61,10 @@
 
         <!-- 格子 4: 角色上传 -->
         <div class="grid-item item-4">
+            <div class="grid-controls">
+                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
             <div class="grid-content">
                 <h2>角色配置</h2>
                 <div style="text-align: center; margin-bottom: 10px;">
@@ -68,6 +84,10 @@
         <!-- 其他格子占位 -->
         {% for i in range(5, 17) %}
         <div class="grid-item item-{{ i }}">
+            <div class="grid-controls">
+                <button class="control-btn" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
             <div class="grid-content">
                 <span class="placeholder">SECTOR {{ "%02d"|format(i) }}</span>
             </div>
@@ -76,6 +96,15 @@
     </div>
 
     <script>
+        // Fullscreen Logic
+        function goFullscreen(elem) {
+            elem.classList.add('fullscreen');
+        }
+
+        function exitFullscreen(elem) {
+            elem.classList.remove('fullscreen');
+        }
+
         // Check ComfyUI Status
         function checkComfyStatus() {
             fetch('/comfy_status')

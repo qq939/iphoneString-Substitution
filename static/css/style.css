@@ -136,3 +136,56 @@ h2, h3 {
     opacity: 0.3;
     font-size: 0.8rem;
 }
+
+/* Grid Controls */
+.grid-controls {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: flex;
+    gap: 5px;
+    z-index: 10;
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s;
+}
+
+.grid-item:hover .grid-controls {
+    opacity: 1;
+}
+
+.control-btn {
+    background: #000;
+    color: #0f0;
+    border: 1px solid #0f0;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 2px 5px;
+    font-family: var(--font-family);
+    min-width: auto;
+    margin-left: 0;
+}
+
+.control-btn:hover {
+    background: #0f0;
+    color: #000;
+    box-shadow: 0 0 5px #0f0;
+}
+
+/* Fullscreen mode */
+.grid-item.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background-color: var(--bg-color);
+    border: none;
+    margin: 0;
+    padding: 20px;
+}
+
+.grid-item.fullscreen .grid-content {
+    height: 100%;
+    width: 100%;
+}

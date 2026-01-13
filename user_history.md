@@ -15,3 +15,6 @@
 
 ## 2026-01-13 [Current Time]
 **User:** 增加上传角色图片功能，接受img、png、webp的格式，命名为character.png，保存在OBS。 界面布局合理美观一点，配色符合主题配色。
+
+## 2026-01-13 [Current Time]
+**User:** 每个格子右上角加两个功能按钮，全屏幕和返回格子
