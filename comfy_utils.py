@@ -62,20 +62,6 @@ class ComfyUIClient:
             return fallback
         return "127.0.0.1:8188"
 
-    def ensure_connection(self):
-        """
-        Ensures we have a valid connection or tries to find one.
-        Returns True if connected/found, False otherwise.
-        """
-        if self.check_connection(timeout=1):
-             return True
-        
-        new_server = self._find_active_server()
-        if new_server:
-            self.server_address = new_server
-            return True
-        return False
-
     def check_connection(self, timeout=2):
         """
         Checks if the current server address is reachable.
@@ -88,7 +74,29 @@ class ComfyUIClient:
                 return True
         except:
             pass
+            
+        # If current fails, try to re-discover
+        logger.info("Current ComfyUI server unreachable, trying to rediscover...")
+        new_server = self._find_active_server()
+        if new_server:
+            self.server_address = new_server
+            # Check again
+            try:
+                url = f"http://{self.server_address}/object_info"
+                response = requests.get(url, timeout=timeout)
+                if response.status_code == 200:
+                    return True
+            except:
+                pass
+                
         return False
+
+    def ensure_connection(self):
+        """
+        Ensures we have a valid connection or tries to find one.
+        Returns True if connected/found, False otherwise.
+        """
+        return self.check_connection(timeout=3)
 
     def upload_file(self, file_path, subfolder="", overwrite=False):
         """
