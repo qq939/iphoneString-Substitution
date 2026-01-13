@@ -1,6 +1,6 @@
 flask
 requests
-moviepy
+moviepy<2.0
 pytest
 websocket-client
 opencv-python-headless

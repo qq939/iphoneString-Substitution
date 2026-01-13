@@ -10,7 +10,7 @@ import time
 import shutil
 from datetime import datetime
 from PIL import Image
-from moviepy import VideoFileClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 import comfy_utils
 import obs_utils
 
