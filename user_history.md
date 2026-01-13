@@ -5,3 +5,7 @@
 
 ## 2026-01-02 [Time Placeholder]
 **User:** exec按钮变成：+和-按钮，+号把字符放到substitution.txt里面，-号把字符从文件中删除。
+
+## 2026-01-13 [Current Time]
+**User:** 第二个格子的名字叫视频切片换人，直接复刻这个仓库的功能，实现视频上传，切片和发送到固定地址。
+`https://github.com/qq939/cutvideo3sec.git`

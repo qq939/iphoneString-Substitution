@@ -28,8 +28,20 @@
             </div>
         </div>
         
-        <!-- 其他 15 个格子占位 -->
-        {% for i in range(2, 17) %}
+        <!-- 格子 2 -->
+        <div class="grid-item item-2">
+            <div class="grid-content">
+                <h2>视频切片换人</h2>
+                <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" style="display: block; margin: 10px 0; background: transparent; color: #00ff00; border: 1px solid #00ff00;">
+                    <button type="submit" id="uploadBtn">EXECUTE</button>
+                </form>
+                <div id="uploadStatus" style="margin-top: 10px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;"></div>
+            </div>
+        </div>
+
+        <!-- 其他 14 个格子占位 -->
+        {% for i in range(3, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-content">
                 <span class="placeholder">SECTOR {{ "%02d"|format(i) }}</span>
@@ -37,5 +49,42 @@
         </div>
         {% endfor %}
     </div>
+
+    <script>
+        document.getElementById('uploadForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('uploadStatus');
+            const btn = document.getElementById('uploadBtn');
+            
+            statusDiv.innerText = 'INITIALIZING UPLOAD...\nTARGET: videocut.dimond.top';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/upload_and_cut', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let msg = 'SEQUENCE COMPLETED.\n';
+                    if (result.results) {
+                        msg += `SEGMENTS: ${result.results.length}\n`;
+                        // Simple status
+                        const successCount = result.results.filter(r => r.status_code === 200).length;
+                        msg += `SUCCESS: ${successCount}/${result.results.length}`;
+                    }
+                    statusDiv.innerText = msg;
+                } else {
+                    statusDiv.innerText = 'ERROR: ' + (result.error || 'Unknown');
+                }
+            } catch (err) {
+                statusDiv.innerText = 'SYSTEM FAILURE: ' + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+        };
+    </script>
 </body>
 </html>
