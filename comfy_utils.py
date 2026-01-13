@@ -124,6 +124,7 @@ class ComfyUIClient:
         Submits a workflow to the ComfyUI queue.
         """
         try:
+            self.ensure_connection()
             url = f"http://{self.server_address}/prompt"
             data = {"prompt": workflow, "client_id": self.client_id}
             data_json = json.dumps(data).encode('utf-8')
@@ -200,6 +201,7 @@ class ComfyUIClient:
         Gets the current queue status.
         """
         try:
+            self.ensure_connection()
             url = f"http://{self.server_address}/queue"
             logger.info(f"Fetching ComfyUI queue: {url}")
             with urllib.request.urlopen(url) as response:
