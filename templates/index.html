@@ -40,8 +40,33 @@
             </div>
         </div>
 
-        <!-- 其他 14 个格子占位 -->
-        {% for i in range(3, 17) %}
+        <!-- 格子 3: 结果展示 -->
+        <div class="grid-item item-3">
+            <div class="grid-content">
+                <span class="placeholder">SECTOR 03 (OUTPUT)</span>
+            </div>
+        </div>
+
+        <!-- 格子 4: 角色上传 -->
+        <div class="grid-item item-4">
+            <div class="grid-content">
+                <h2>角色配置</h2>
+                <div style="text-align: center; margin-bottom: 10px;">
+                    <img id="charPreview" src="http://obs.dimond.top/character.png" 
+                         style="max-width: 100px; max-height: 100px; border: 1px solid #00ff00; object-fit: contain;"
+                         onerror="this.style.display='none'">
+                </div>
+                <form id="charUploadForm" action="/upload_character" method="post" enctype="multipart/form-data">
+                    <input type="file" name="image" accept="image/png, image/jpeg, image/webp" 
+                           style="display: block; margin: 5px 0; background: transparent; color: #00ff00; border: 1px solid #00ff00; font-size: 0.8em; width: 100%;">
+                    <button type="submit" id="charUploadBtn" style="width: 100%;">UPLOAD CHARACTER</button>
+                </form>
+                <div id="charStatus" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+            </div>
+        </div>
+
+        <!-- 其他格子占位 -->
+        {% for i in range(5, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-content">
                 <span class="placeholder">SECTOR {{ "%02d"|format(i) }}</span>
@@ -51,6 +76,65 @@
     </div>
 
     <script>
+        // Check ComfyUI Status
+        function checkComfyStatus() {
+            fetch('/comfy_status')
+                .then(response => response.json())
+                .then(data => {
+                    const dot = document.getElementById('comfyStatusDot');
+                    if (data.connected) {
+                        dot.style.backgroundColor = '#00ff00'; // Green
+                        dot.style.boxShadow = '0 0 5px #00ff00';
+                    } else {
+                        dot.style.backgroundColor = '#ff0000'; // Red
+                        dot.style.boxShadow = '0 0 5px #ff0000';
+                    }
+                })
+                .catch(err => {
+                    console.error('Status check failed:', err);
+                    const dot = document.getElementById('comfyStatusDot');
+                    dot.style.backgroundColor = 'gray';
+                });
+        }
+        
+        // Check immediately and then every 30 seconds
+        checkComfyStatus();
+        setInterval(checkComfyStatus, 30000);
+
+        // Character Upload Handler
+        document.getElementById('charUploadForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('charStatus');
+            const btn = document.getElementById('charUploadBtn');
+            const preview = document.getElementById('charPreview');
+            
+            statusDiv.innerText = 'UPLOADING...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/upload_character', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerText = 'UPLOAD SUCCESS.';
+                    // Update preview with cache busting
+                    preview.src = result.url + '?t=' + new Date().getTime();
+                    preview.style.display = 'inline-block';
+                } else {
+                    statusDiv.innerText = 'ERROR: ' + (result.error || 'Unknown');
+                }
+            } catch (err) {
+                statusDiv.innerText = 'SYSTEM FAILURE: ' + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        // Video Upload Handler
         document.getElementById('uploadForm').onsubmit = async function(e) {
             e.preventDefault();
             const formData = new FormData(this);

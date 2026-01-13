@@ -9,6 +9,7 @@ import threading
 import time
 import shutil
 from datetime import datetime
+from PIL import Image
 from moviepy import VideoFileClip, concatenate_videoclips
 import comfy_utils
 import obs_utils
@@ -22,6 +23,32 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+
+# ComfyUI Status
+COMFY_STATUS = {
+    'status': 'unknown',
+    'last_checked': 0
+}
+
+def check_comfy_status():
+    """Background task to check ComfyUI status periodically"""
+    while True:
+        try:
+            # We assume comfy_utils has a way to check connection or we just check the server
+            # For now, let's just use comfy_utils.client.check_connection() if available
+            # Or just check if we can reach it
+            if comfy_utils.client.check_connection():
+                COMFY_STATUS['status'] = 'online'
+            else:
+                COMFY_STATUS['status'] = 'offline'
+        except:
+            COMFY_STATUS['status'] = 'offline'
+        COMFY_STATUS['last_checked'] = time.time()
+        time.sleep(30)
+
+# Start status checker
+status_thread = threading.Thread(target=check_comfy_status, daemon=True)
+status_thread.start()
 
 # In-memory store for task groups
 # Structure:
@@ -98,10 +125,8 @@ def core_replace(text):
         text = text.replace(char, '')
     return text
 
-
 @app.route('/replace', methods=['POST'])
 def replace():
-    
     # ========== 核心修改：解析JSON数据 ==========
     try:
         # 直接解析JSON请求体，自动保留换行符/中文
@@ -125,6 +150,52 @@ def replace():
         status=200,
         mimetype='text/plain; charset=utf-8'
     )
+
+@app.route('/comfy_status')
+def comfy_status():
+    return jsonify(COMFY_STATUS)
+
+@app.route('/upload_character', methods=['POST'])
+def upload_character():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image file provided'}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+        
+    # Check extension
+    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+    if ext not in ['jpg', 'jpeg', 'png', 'webp']:
+        return jsonify({'error': 'Invalid file type. Only jpg, png, webp allowed.'}), 400
+
+    try:
+        # Save uploaded file temporarily
+        temp_path = os.path.join(UPLOAD_FOLDER, f"temp_char_{uuid.uuid4()}.{ext}")
+        file.save(temp_path)
+        
+        # Convert to PNG
+        img = Image.open(temp_path)
+        png_filename = "character.png"
+        png_path = os.path.join(UPLOAD_FOLDER, png_filename)
+        img.save(png_path, "PNG")
+        
+        # Upload to OBS
+        obs_url = obs_utils.upload_file(png_path, png_filename, mime_type='image/png')
+        
+        # Clean up
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        if os.path.exists(png_path):
+            os.remove(png_path)
+            
+        if obs_url:
+            return jsonify({'status': 'success', 'url': obs_url, 'message': 'Character updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to upload to OBS'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def monitor_group_task(group_id):
     """
@@ -152,7 +223,7 @@ def monitor_group_task(group_id):
             # Check status from ComfyUI
             try:
                 status, result = comfy_utils.check_status(task['task_id'])
-                print(f"Task {task['task_id']} status: {status}")
+                # print(f"Task {task['task_id']} status: {status}")
                 
                 if status == 'SUCCEEDED':
                     # Download result
@@ -253,13 +324,23 @@ def upload_and_cut():
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(file_path)
     
-    # Use default character image if not provided (assuming lulu.webp exists)
-    character_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'face', 'lulu.webp')
-    if not os.path.exists(character_path):
-        # Fallback or error? For now try to use a placeholder or fail
-        pass 
-        # Actually submit_job requires a file. If lulu.webp is missing, this will fail.
-        # But we copied it in previous step.
+    # NEW: Download character from OBS
+    character_url = "http://obs.dimond.top/character.png"
+    character_path = os.path.join(UPLOAD_FOLDER, f"character_for_{filename}.png")
+    
+    try:
+        # Download character
+        with requests.get(character_url, stream=True) as r:
+            if r.status_code == 200:
+                with open(character_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            else:
+                # Fallback to local default if exists? Or fail?
+                # Let's try to fail gracefully
+                return jsonify({'error': f"Failed to download character from {character_url}"}), 500
+    except Exception as e:
+        return jsonify({'error': f"Failed to download character: {e}"}), 500
     
     group_id = str(uuid.uuid4())
     TASKS_STORE[group_id] = {
@@ -328,6 +409,13 @@ def upload_and_cut():
         # Clean up original file
         if os.path.exists(file_path):
             os.remove(file_path)
+        
+        # Clean up downloaded character file? 
+        # We can keep it or delete it. Since it's unique per request (character_for_...), we should delete it.
+        # But tasks are async... wait, submit_job uploads it to ComfyUI. 
+        # Once submit_job returns, the file has been read and uploaded.
+        if os.path.exists(character_path):
+            os.remove(character_path)
             
         # Start background monitor
         thread = threading.Thread(target=monitor_group_task, args=(group_id,))
@@ -344,6 +432,9 @@ def upload_and_cut():
         # Clean up original file if error
         if 'file_path' in locals() and os.path.exists(file_path):
             os.remove(file_path)
+        if 'character_path' in locals() and os.path.exists(character_path):
+            os.remove(character_path)
+            
         TASKS_STORE[group_id]['status'] = 'failed'
         TASKS_STORE[group_id]['error'] = str(e)
         return jsonify({'error': str(e)}), 500

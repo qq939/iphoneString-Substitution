@@ -81,18 +81,28 @@ def test_async_process_flow(client):
         mock_final_clip = MagicMock()
         mock_concat.return_value = mock_final_clip
         
-        # 1. Upload Video
-        data = {
-            'video': (io.BytesIO(video_content), filename)
-        }
-        response = client.post('/upload_and_cut', data=data, content_type='multipart/form-data')
-        
-        assert response.status_code == 200
-        json_data = response.get_json()
-        assert 'group_id' in json_data
-        group_id = json_data['group_id']
-        
-        # 2. Wait for background thread to finish
+        # Mock requests.get for character download
+        with patch('app.requests.get') as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.iter_content.return_value = [b'fake character image']
+            mock_response.raise_for_status = MagicMock()
+            
+            # Setup context manager return value
+            mock_get.return_value.__enter__.return_value = mock_response
+            
+            # 1. Upload Video
+            data = {
+                'video': (io.BytesIO(video_content), filename)
+            }
+            response = client.post('/upload_and_cut', data=data, content_type='multipart/form-data')
+            
+            assert response.status_code == 200
+            json_data = response.get_json()
+            assert 'group_id' in json_data
+            group_id = json_data['group_id']
+            
+            # 2. Wait for background thread to finish
         # We can loop check_group_status
         start_time = time.time()
         final_status = None

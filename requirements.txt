@@ -4,3 +4,4 @@ moviepy
 pytest
 websocket-client
 opencv-python-headless
+Pillow

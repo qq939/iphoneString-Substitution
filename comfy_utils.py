@@ -32,8 +32,10 @@ class ComfyUIClient:
         else:
             self.servers = ["127.0.0.1:8188"]
             
-        self.server_address = self._find_active_server()
-        logger.info(f"ComfyUIClient initialized with server: {self.server_address}")
+        # Do not find active server on init to prevent blocking
+        # Default to first one or a placeholder
+        self.server_address = self.servers[0].replace("http://", "").replace("https://", "").rstrip("/") if self.servers else "127.0.0.1:8188"
+        logger.info(f"ComfyUIClient initialized. Active server detection deferred. Default: {self.server_address}")
 
     def _find_active_server(self):
         """
@@ -47,7 +49,7 @@ class ComfyUIClient:
                 url = f"http://{clean_server}/object_info"
                 logger.info(f"Checking connectivity to ComfyUI server: {url}")
                 # Short timeout for connectivity check
-                response = requests.get(url, timeout=3)
+                response = requests.get(url, timeout=5) # Increased timeout
                 
                 if response.status_code == 200:
                     logger.info(f"Successfully connected to ComfyUI server: {clean_server}")
@@ -62,33 +64,32 @@ class ComfyUIClient:
             return fallback
         return "127.0.0.1:8188"
 
-    def check_connection(self):
+    def ensure_connection(self):
+        """
+        Ensures we have a valid connection or tries to find one.
+        Returns True if connected/found, False otherwise.
+        """
+        if self.check_connection(timeout=1):
+             return True
+        
+        new_server = self._find_active_server()
+        if new_server:
+            self.server_address = new_server
+            return True
+        return False
+
+    def check_connection(self, timeout=2):
         """
         Checks if the current server address is reachable.
         If not, tries to find an active server again.
         """
         try:
             url = f"http://{self.server_address}/object_info"
-            response = requests.get(url, timeout=2)
+            response = requests.get(url, timeout=timeout)
             if response.status_code == 200:
                 return True
         except:
             pass
-            
-        # If current fails, try to re-discover
-        logger.info("Current ComfyUI server unreachable, trying to rediscover...")
-        new_server = self._find_active_server()
-        if new_server:
-            self.server_address = new_server
-            # Check again
-            try:
-                url = f"http://{self.server_address}/object_info"
-                response = requests.get(url, timeout=2)
-                if response.status_code == 200:
-                    return True
-            except:
-                pass
-                
         return False
 
     def upload_file(self, file_path, subfolder="", overwrite=False):
@@ -267,6 +268,8 @@ if SERVER_ADDRESS:
 else:
     # Use default list from __init__
     client = ComfyUIClient()
+
+# Note: We deferred connection check, so client is ready immediately.
 
 import tempfile
 import shutil
