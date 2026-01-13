@@ -374,7 +374,7 @@ def upload_and_cut():
             end_time = min((i + 1) * segment_duration, duration)
             
             # Create subclip
-            subclip = clip.subclipped(start_time, end_time)
+            subclip = clip.subclip(start_time, end_time)
             
             # Generate segment filename
             segment_filename = f"segment_{i}_{group_id}.mp4"
