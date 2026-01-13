@@ -10,7 +10,7 @@ import time
 import shutil
 from datetime import datetime
 from PIL import Image
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx
 import comfy_utils
 import obs_utils
 
@@ -280,9 +280,36 @@ def monitor_group_task(group_id):
                 
                 if clips:
                     final_clip = concatenate_videoclips(clips)
+                    
+                    # Merge audio back
+                    audio_path = group_data.get('audio_path')
+                    if audio_path and os.path.exists(audio_path):
+                        try:
+                            audio_clip = AudioFileClip(audio_path)
+                            video_duration = final_clip.duration
+                            audio_duration = audio_clip.duration
+                            
+                            if audio_duration < video_duration:
+                                # Loop audio
+                                audio_clip = afx.audio_loop(audio_clip, duration=video_duration)
+                            else:
+                                # Cut audio
+                                audio_clip = audio_clip.subclip(0, video_duration)
+                                
+                            final_clip = final_clip.set_audio(audio_clip)
+                            print(f"Merged audio from {audio_path}")
+                        except Exception as e:
+                            print(f"Failed to merge audio: {e}")
+                    
                     output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
                     output_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                    final_clip.write_videofile(output_path, codec='libx264', audio=False)
+                    # Write with audio if available
+                    final_clip.write_videofile(
+                        output_path, 
+                        codec='libx264', 
+                        audio_codec='aac' if final_clip.audio else None,
+                        audio=(final_clip.audio is not None)
+                    )
                     
                     # Close clips
                     final_clip.close()
@@ -347,10 +374,29 @@ def upload_and_cut():
         return jsonify({'error': f"Failed to download character: {e}"}), 500
     
     group_id = str(uuid.uuid4())
+    
+    # Extract audio immediately
+    audio_path = os.path.join(UPLOAD_FOLDER, f"original_audio_{group_id}.mp3")
+    try:
+        # We need to extract audio using moviepy before we do anything else
+        # Or just use the original file if it has audio
+        # Let's use VideoFileClip to extract
+        temp_clip = VideoFileClip(file_path)
+        if temp_clip.audio:
+            temp_clip.audio.write_audiofile(audio_path, logger=None)
+            has_audio = True
+        else:
+            has_audio = False
+        temp_clip.close()
+    except Exception as e:
+        print(f"Failed to extract audio: {e}")
+        has_audio = False
+
     TASKS_STORE[group_id] = {
         'status': 'processing',
         'tasks': [],
-        'created_at': time.time()
+        'created_at': time.time(),
+        'audio_path': audio_path if has_audio else None
     }
     
     try:
