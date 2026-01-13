@@ -202,3 +202,35 @@ h2, h3 {
     height: 100%;
     width: 100%;
 }
+
+/* Uniform Input and Button Styles */
+.upload-input {
+    display: block;
+    margin: 10px 0;
+    background: transparent;
+    color: #0f0;
+    border: 1px solid #0f0;
+    font-family: var(--font-family);
+    padding: 5px;
+    width: 100%;
+    font-size: 0.8rem;
+}
+
+.action-btn {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 5px;
+    padding: 5px;
+    background: var(--text-color);
+    color: var(--bg-color);
+    border: 1px solid var(--text-color);
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.action-btn:hover {
+    background: var(--bg-color);
+    color: var(--text-color);
+    box-shadow: 0 0 5px var(--text-color);
+}

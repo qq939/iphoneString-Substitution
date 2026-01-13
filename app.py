@@ -356,6 +356,13 @@ def upload_and_cut():
     try:
         # Load video
         clip = VideoFileClip(file_path)
+        
+        # Resize and set FPS (Preprocessing)
+        # Height 848, width auto-scaled (maintaining aspect ratio), FPS 30
+        print(f"Preprocessing video: resizing to height=848 and setting fps=30")
+        clip = clip.resize(height=848)
+        clip = clip.set_fps(30)
+        
         duration = clip.duration
         
         # Cut into 3s segments

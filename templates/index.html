@@ -32,35 +32,8 @@
             </div>
         </div>
         
-        <!-- 格子 2 -->
+        <!-- 格子 2: 角色上传 (原 Grid 4) -->
         <div class="grid-item item-2">
-            <div class="grid-controls">
-                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
-            </div>
-            <div class="grid-content">
-                <h2>视频切片换人</h2>
-                <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
-                    <input type="file" name="video" accept="video/*" style="display: block; margin: 10px 0; background: transparent; color: #00ff00; border: 1px solid #00ff00;">
-                    <button type="submit" id="uploadBtn">EXECUTE</button>
-                </form>
-                <div id="uploadStatus" style="margin-top: 10px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;"></div>
-            </div>
-        </div>
-
-        <!-- 格子 3: 结果展示 -->
-        <div class="grid-item item-3">
-            <div class="grid-controls">
-                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
-            </div>
-            <div class="grid-content">
-                <span class="placeholder">SECTOR 03 (OUTPUT)</span>
-            </div>
-        </div>
-
-        <!-- 格子 4: 角色上传 -->
-        <div class="grid-item item-4">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
@@ -74,15 +47,64 @@
                 </div>
                 <form id="charUploadForm" action="/upload_character" method="post" enctype="multipart/form-data">
                     <input type="file" name="image" accept="image/png, image/jpeg, image/webp" 
-                           style="display: block; margin: 5px 0; background: transparent; color: #00ff00; border: 1px solid #00ff00; font-size: 0.8em; width: 100%;">
-                    <button type="submit" id="charUploadBtn" style="width: 100%;">UPLOAD CHARACTER</button>
+                           class="upload-input">
+                    <button type="submit" id="charUploadBtn" class="action-btn">UPLOAD CHARACTER</button>
                 </form>
                 <div id="charStatus" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
 
+        <!-- 格子 3: 空 -->
+        <div class="grid-item item-3">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <span class="placeholder">SECTOR 03</span>
+            </div>
+        </div>
+
+        <!-- 格子 4: 空 (原 Grid 4 移走了) -->
+        <div class="grid-item item-4">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <span class="placeholder">SECTOR 04</span>
+            </div>
+        </div>
+
+        <!-- 格子 5 -->
+        <div class="grid-item item-5">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <span class="placeholder">SECTOR 05</span>
+            </div>
+        </div>
+
+        <!-- 格子 6: 视频切片换人 (原 Grid 2) -->
+        <div class="grid-item item-6">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <h2>视频切片换人</h2>
+                <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" id="uploadBtn" class="action-btn">EXECUTE</button>
+                </form>
+                <div id="uploadStatus" style="margin-top: 10px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;"></div>
+            </div>
+        </div>
+
         <!-- 其他格子占位 -->
-        {% for i in range(5, 17) %}
+        {% for i in range(7, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
