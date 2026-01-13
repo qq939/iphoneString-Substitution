@@ -329,21 +329,6 @@
       "title": "Points Editor"
     }
   },
-  "243": {
-    "inputs": {
-      "filename_prefix": "video/ComfyUI",
-      "format": "auto",
-      "codec": "auto",
-      "video": [
-        "242:88",
-        0
-      ]
-    },
-    "class_type": "SaveVideo",
-    "_meta": {
-      "title": "保存视频"
-    }
-  },
   "274": {
     "inputs": {
       "expand": 50,
@@ -432,7 +417,7 @@
         "160",
         0
       ],
-      "length": 77,
+      "length": 90,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": 0,
@@ -497,7 +482,7 @@
   },
   "232:15": {
     "inputs": {
-      "fps": 16,
+      "fps": 30,
       "images": [
         "232:230",
         0
@@ -540,181 +525,6 @@
     "class_type": "KSampler",
     "_meta": {
       "title": "K采样器"
-    }
-  },
-  "242:87": {
-    "inputs": {
-      "samples": [
-        "242:92",
-        0
-      ],
-      "vae": [
-        "3",
-        0
-      ]
-    },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE解码"
-    }
-  },
-  "242:92": {
-    "inputs": {
-      "trim_amount": [
-        "242:90",
-        3
-      ],
-      "samples": [
-        "242:91",
-        0
-      ]
-    },
-    "class_type": "TrimVideoLatent",
-    "_meta": {
-      "title": "TrimVideoLatent"
-    }
-  },
-  "242:85": {
-    "inputs": {
-      "batch_index": [
-        "242:90",
-        4
-      ],
-      "length": 4096,
-      "image": [
-        "242:87",
-        0
-      ]
-    },
-    "class_type": "ImageFromBatch",
-    "_meta": {
-      "title": "从批次获取图像"
-    }
-  },
-  "242:90": {
-    "inputs": {
-      "width": [
-        "159",
-        0
-      ],
-      "height": [
-        "159",
-        0
-      ],
-      "length": 77,
-      "batch_size": 1,
-      "continue_motion_max_frames": 5,
-      "video_frame_offset": [
-        "232:62",
-        5
-      ],
-      "positive": [
-        "21",
-        0
-      ],
-      "negative": [
-        "1",
-        0
-      ],
-      "vae": [
-        "3",
-        0
-      ],
-      "clip_vision_output": [
-        "9",
-        0
-      ],
-      "reference_image": [
-        "10",
-        0
-      ],
-      "face_video": [
-        "100",
-        0
-      ],
-      "pose_video": [
-        "101",
-        0
-      ],
-      "background_video": [
-        "275",
-        0
-      ],
-      "character_mask": [
-        "276",
-        0
-      ],
-      "continue_motion": [
-        "232:58",
-        0
-      ]
-    },
-    "class_type": "WanAnimateToVideo",
-    "_meta": {
-      "title": "Wan动画转视频"
-    }
-  },
-  "242:88": {
-    "inputs": {
-      "fps": 16,
-      "images": [
-        "242:86",
-        0
-      ],
-      "audio": [
-        "23",
-        1
-      ]
-    },
-    "class_type": "CreateVideo",
-    "_meta": {
-      "title": "创建视频"
-    }
-  },
-  "242:91": {
-    "inputs": {
-      "seed": 387378783691198,
-      "steps": 6,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "denoise": 1,
-      "model": [
-        "60",
-        0
-      ],
-      "positive": [
-        "242:90",
-        0
-      ],
-      "negative": [
-        "242:90",
-        1
-      ],
-      "latent_image": [
-        "242:90",
-        2
-      ]
-    },
-    "class_type": "KSampler",
-    "_meta": {
-      "title": "K采样器"
-    }
-  },
-  "242:86": {
-    "inputs": {
-      "image1": [
-        "232:58",
-        0
-      ],
-      "image2": [
-        "242:85",
-        0
-      ]
-    },
-    "class_type": "ImageBatch",
-    "_meta": {
-      "title": "组合图像批次"
     }
   }
 }
