@@ -32,10 +32,8 @@ class ComfyUIClient:
         else:
             self.servers = ["127.0.0.1:8188"]
             
-        # Do not find active server on init to prevent blocking
-        # Default to first one or a placeholder
-        self.server_address = self.servers[0].replace("http://", "").replace("https://", "").rstrip("/") if self.servers else "127.0.0.1:8188"
-        logger.info(f"ComfyUIClient initialized. Active server detection deferred. Default: {self.server_address}")
+        self.server_address = self._find_active_server()
+        logger.info(f"ComfyUIClient initialized with server: {self.server_address}")
 
     def _find_active_server(self):
         """
