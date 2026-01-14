@@ -104,7 +104,7 @@ def remove_substitution(char):
     with open(SUBSTITUTION_FILE, 'w', encoding='utf-8') as f:
         f.write(new_content)
 
-def modify_audio_workflow(workflow, text, filename):
+def modify_audio_workflow(workflow, text, filename, emotions=None):
     """
     Modifies the audio workflow JSON based on inputs.
     """
@@ -122,6 +122,21 @@ def modify_audio_workflow(workflow, text, filename):
         # Max seed for 32-bit/safe integer in some contexts is 2^32 - 1 = 4294967295
         # The error says "Value ... bigger than max of 4294967295"
         workflow["27"]["inputs"]["seed"] = random.randint(1, 4294967295)
+
+    # 4. Update Emotions (Node 47)
+    # Emotions list: Happy, Angry, Sad, Fear, Hate, Low, Surprise, Neutral
+    all_emotions = ["Happy", "Angry", "Sad", "Fear", "Hate", "Low", "Surprise", "Neutral"]
+    if "47" in workflow and "inputs" in workflow["47"]:
+        if emotions:
+            for emo in all_emotions:
+                if emo in emotions:
+                    workflow["47"]["inputs"][emo] = 0.75
+                else:
+                    workflow["47"]["inputs"][emo] = 0
+        else:
+            # Reset all to 0 if no emotions provided
+            for emo in all_emotions:
+                workflow["47"]["inputs"][emo] = 0
         
     return workflow
 
@@ -240,6 +255,7 @@ def upload_audio():
     
     file = request.files.get('file')
     text = request.form.get('text', '')
+    emotions = request.form.getlist('emotions') # Get list of selected emotions
     
     if not text:
         return jsonify({'error': 'No text provided'}), 400
@@ -335,7 +351,7 @@ def upload_audio():
         with open(workflow_path, 'r', encoding='utf-8') as f:
             workflow = json.load(f)
             
-        workflow = modify_audio_workflow(workflow, text, uploaded_filename)
+        workflow = modify_audio_workflow(workflow, text, uploaded_filename, emotions)
         
         # Queue Prompt
         prompt_id = comfy_utils.client.queue_prompt(workflow)
