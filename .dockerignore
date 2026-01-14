@@ -1,0 +1,12 @@
+bin/
+venv/
+.git/
+.gitignore
+.dockerignore
+tmp/
+__pycache__/
+.DS_Store
+.pytest_cache/
+.vscode/
+.idea/
+*.pyc
