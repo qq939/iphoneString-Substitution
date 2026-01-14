@@ -376,15 +376,20 @@ def cancel_job(prompt_id):
     """
     return client.cancel_task(prompt_id)
 
-def queue_workflow_template(char_filename, video_filename, prompt_text=None):
+def queue_workflow_template(char_filename, video_filename, prompt_text=None, workflow_type='real'):
     """
     Loads workflow template, updates inputs, and queues prompt.
+    workflow_type: 'real' or 'anime'
     """
     try:
         # 2. Load workflow
-        workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '视频换人video_wan2_2_14B_animate.json')
+        if workflow_type == 'anime':
+            workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '真人换动漫.json')
+        else:
+            workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '视频换人video_wan2_2_14B_animate.json')
+            
         if not os.path.exists(workflow_path):
-            return None, "Workflow file not found"
+            return None, f"Workflow file not found: {workflow_path}"
             
         with open(workflow_path, 'r', encoding='utf-8') as f:
             workflow = json.load(f)
@@ -405,15 +410,29 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None):
             workflow["21"]["inputs"]["text"] = prompt_text
             
         # Randomize seed for KSamplers to ensure new results
-        # Nodes: 232:63 and 242:91 (KSampler)
+        # Nodes: 232:63 and 242:91 (KSampler) for real workflow
+        # Need to check nodes for anime workflow as well, likely similar or same logic if nodes match
+        # Let's check for KSamplers generally if possible or specific IDs
+        
         import random
         seed = random.randint(1, 1000000000000000)
         
+        # Real Workflow Nodes
         if "232:63" in workflow:
             workflow["232:63"]["inputs"]["seed"] = seed
         
         if "242:91" in workflow:
             workflow["242:91"]["inputs"]["seed"] = seed
+            
+        # Anime Workflow might have different nodes?
+        # Based on typical ComfyUI usage, KSampler usually has "seed" input.
+        # Let's iterate and update any node with "seed" input if we want to be generic, 
+        # or stick to specific IDs if we know them.
+        # For now, let's assume the provided JSONs use standard KSampler or specific ones.
+        # If '真人换动漫.json' has different IDs, we should inspect it.
+        # But '真人换动漫.json' content read earlier shows node "64" is KSampler (inputs: seed).
+        if "64" in workflow and "inputs" in workflow["64"] and "seed" in workflow["64"]["inputs"]:
+             workflow["64"]["inputs"]["seed"] = seed
             
         # 4. Queue prompt
         prompt_id = client.queue_prompt(workflow)

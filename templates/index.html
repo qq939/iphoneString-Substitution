@@ -88,6 +88,10 @@
             <div class="grid-content">
                 <h2>视频换人 <span id="comfyStatusDot" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
                 <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
+                    <div style="margin-bottom: 5px;">
+                        <label style="margin-right: 10px;"><input type="radio" name="workflow_type" value="real" checked> 真人</label>
+                        <label><input type="radio" name="workflow_type" value="anime"> 动漫</label>
+                    </div>
                     <input type="file" name="video" accept="video/*" class="upload-input">
                     <button type="submit" id="uploadBtn" class="action-btn">EXECUTE</button>
                 </form>
@@ -120,8 +124,9 @@
             <div class="grid-content">
                 <h2>音频生成 <span id="comfyStatusDotAudio" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
                 <form id="audioUploadForm" action="/upload_audio" method="post" enctype="multipart/form-data">
-                    <div style="margin-bottom: 5px;">
-                        <input type="text" name="text" placeholder="输入生成的文本" class="upload-input" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" required>
+                    <div style="margin-bottom: 5px; display: flex; gap: 5px; align-items: center;">
+                        <input type="text" name="text" placeholder="输入生成的文本" class="upload-input" style="flex-grow: 1; box-sizing: border-box; margin-bottom: 0;" required>
+                        <button type="submit" id="audioUploadBtn" class="action-btn" style="white-space: nowrap;">GENERATE AUDIO</button>
                     </div>
                     
                     <!-- 情感选择 Checkboxes -->
@@ -137,7 +142,6 @@
                     </div>
                     
                     <input type="file" name="file" accept="audio/*" class="upload-input">
-                    <button type="submit" id="audioUploadBtn" class="action-btn">GENERATE AUDIO</button>
                 </form>
                 <div id="audioStatus" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>

@@ -733,6 +733,9 @@ def upload_and_cut():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
+    # Get workflow type
+    workflow_type = request.form.get('workflow_type', 'real') # 'real' or 'anime'
+
     # Save uploaded file
     filename = file.filename
     file_path = os.path.join(UPLOAD_FOLDER, filename)
@@ -779,49 +782,62 @@ def upload_and_cut():
         'status': 'processing',
         'tasks': [],
         'created_at': time.time(),
+        'workflow_type': workflow_type,
         'audio_path': audio_path if has_audio else None
     }
     
     try:
-        # Load video
+        # Preprocessing: Resize and set FPS
+        # Target: Height 848, FPS 30
         clip = VideoFileClip(file_path)
         
-        # Resize and set FPS (Preprocessing)
-        # Height 848, width auto-scaled (maintaining aspect ratio), FPS 30
-        print(f"Preprocessing video: resizing to height=848 and setting fps=30")
-        clip = clip.resize(height=848)
-        clip = clip.set_fps(30)
+        # Resize height to 848
+        clip_resized = clip.resize(height=848)
         
         duration = clip.duration
+        fps = 30 # Target FPS
         
-        # Cut into 3s segments
-        segment_duration = 3
+        # Calculate segments (4s duration as requested)
+        segment_duration = 4
         num_segments = math.ceil(duration / segment_duration)
+        
+        print(f"Processing video: {filename}, duration: {duration}s, segments: {num_segments}, workflow: {workflow_type}")
         
         for i in range(num_segments):
             start_time = i * segment_duration
             end_time = min((i + 1) * segment_duration, duration)
             
             # Create subclip
-            subclip = clip.subclip(start_time, end_time)
+            subclip = clip_resized.subclip(start_time, end_time)
             
             # Generate segment filename
-            segment_filename = f"segment_{i}_{group_id}.mp4"
+            segment_filename = f"segment_{group_id}_{i}.mp4"
             segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
             
-            # Write segment to file
+            # Write segment
             subclip.write_videofile(
                 segment_path, 
+                fps=fps, 
                 codec='libx264', 
-                audio=False, # Disable audio to avoid MoviePy errors and sync issues
-                remove_temp=True,
-                preset='ultrafast',
-                logger=None # Silence output
+                audio=False, 
+                logger=None
             )
             
-            # Submit to ComfyUI
-            # We use comfy_utils.submit_job which handles uploading files and queuing workflow
-            prompt_id, error = comfy_utils.submit_job(character_path, segment_path)
+            # Upload files to ComfyUI
+            comfy_seg = comfy_utils.client.upload_file(segment_path)
+            if not comfy_seg:
+                raise Exception("Failed to upload video segment")
+            
+            comfy_char = comfy_utils.client.upload_file(character_path)
+            if not comfy_char:
+                raise Exception("Failed to upload character")
+                
+            # Submit job with workflow_type
+            prompt_id, error = comfy_utils.queue_workflow_template(
+                comfy_char['name'], 
+                comfy_seg['name'], 
+                workflow_type=workflow_type
+            )
             
             if prompt_id:
                 TASKS_STORE[group_id]['tasks'].append({
@@ -831,28 +847,24 @@ def upload_and_cut():
                     'result_path': None
                 })
             else:
-                # If one fails, fail the whole group? Or continue?
-                # For now fail immediately
                 TASKS_STORE[group_id]['status'] = 'failed'
                 TASKS_STORE[group_id]['error'] = f"Failed to submit segment {i}: {error}"
                 clip.close()
+                clip_resized.close()
                 return jsonify({'error': f"Failed to submit segment {i}: {error}"}), 500
             
-            # Clean up segment file (optional, but submit_job uploads it so we can delete local)
-            # comfy_utils.submit_job reads the file. After return it's done.
+            # Clean up segment file
             if os.path.exists(segment_path):
                 os.remove(segment_path)
                 
         clip.close()
+        clip_resized.close()
         
         # Clean up original file
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Clean up downloaded character file? 
-        # We can keep it or delete it. Since it's unique per request (character_for_...), we should delete it.
-        # But tasks are async... wait, submit_job uploads it to ComfyUI. 
-        # Once submit_job returns, the file has been read and uploaded.
+        # Clean up downloaded character file
         if os.path.exists(character_path):
             os.remove(character_path)
             
