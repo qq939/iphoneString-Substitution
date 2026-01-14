@@ -417,23 +417,14 @@ def get_latest_audio():
     Naming convention: YYYYMMDDHHMMSSaudio.flac
     """
     try:
-        # We need to list files from OBS or local?
-        # Since we upload to OBS and don't keep a local DB, we can check local UPLOAD_FOLDER for files we downloaded/processed
-        # But wait, download_result saves to UPLOAD_FOLDER with ComfyUI's filename (e.g. ComfyUI_0001.flac or similar)
-        # It doesn't rename to YYYYMMDDHHMMSSaudio.flac locally unless we do it.
-        # In check_audio_status, we upload to OBS with that name, but local file is whatever download_result returned.
-        # We should probably check OBS listing? But obs_utils might not support listing.
-        # Let's rely on the fact that we process it on this server.
-        # We can rename the local file to match the OBS name after uploading, or keep a record.
-        # Let's verify what check_audio_status does.
-        # It uploads `local_path` to OBS as `output_filename`.
-        # We should rename `local_path` to `output_filename` locally too so we can find it.
+        # 1. Try to fetch from OBS directly (Stateless)
+        latest_file = get_latest_file_from_obs('audio.flac')
         
-        # Refactor check_audio_status slightly to rename local file?
-        # Or just search for *audio.flac in UPLOAD_FOLDER if we save it there.
-        # Wait, check_audio_status doesn't save with new name locally.
-        # I'll update check_audio_status to rename local file.
-        
+        if latest_file:
+            obs_url = f"http://obs.dimond.top/{latest_file}"
+            return jsonify({'url': obs_url, 'filename': latest_file})
+            
+        # 2. Fallback to local
         files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('audio.flac')]
         if not files:
             return jsonify({'url': None})
@@ -755,6 +746,47 @@ def check_group_status(group_id):
     }
     return jsonify(response)
 
+def get_latest_file_from_obs(suffix):
+    """
+    Fetches the file list from OBS and returns the latest file matching the suffix.
+    """
+    try:
+        # Fetch OBS index page
+        response = requests.get("http://obs.dimond.top/", timeout=5)
+        if response.status_code != 200:
+            print(f"Failed to fetch OBS index: {response.status_code}")
+            return None
+            
+        # Parse filenames using regex
+        # Look for href="http://obs.dimond.top/FILENAME" or just FILENAME in list
+        # Based on curl output: <a href="http://obs.dimond.top/20260114002813all.mp4" target="_blank">
+        import re
+        content = response.text
+        # Regex to capture filenames ending with suffix
+        # Pattern matches: href="http://obs.dimond.top/(.*?suffix)" or href="(.*?suffix)"
+        # Assuming simple filenames without path
+        pattern = r'href=["\'](?:http://obs\.dimond\.top/)?([^"\']+' + re.escape(suffix) + r')["\']'
+        matches = re.findall(pattern, content)
+        
+        if not matches:
+            return None
+            
+        # Filter out duplicates and sort
+        unique_files = list(set(matches))
+        unique_files.sort(reverse=True)
+        
+        if unique_files:
+            latest_file = unique_files[0]
+            # Ensure it's just the filename, not full URL
+            if "/" in latest_file:
+                latest_file = latest_file.split("/")[-1]
+            return latest_file
+            
+        return None
+    except Exception as e:
+        print(f"Error fetching from OBS: {e}")
+        return None
+
 @app.route('/latest_video', methods=['GET'])
 def get_latest_video():
     """
@@ -762,30 +794,21 @@ def get_latest_video():
     Naming convention: YYYYMMDDHHMMSSall.mp4
     """
     try:
-        # Since we don't have a database of OBS files, we can either:
-        # 1. List files in local UPLOAD_FOLDER and find the latest 'all.mp4'
-        # 2. Assume the filename format allows sorting
+        # 1. Try to fetch from OBS directly (Stateless)
+        latest_file = get_latest_file_from_obs('all.mp4')
         
-        # Check local folder for files
+        if latest_file:
+            obs_url = f"http://obs.dimond.top/{latest_file}"
+            return jsonify({'url': obs_url})
+            
+        # 2. Fallback to local file system if OBS fetch fails or returns nothing
+        # (This handles case where OBS index might be disabled but local has it)
         files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('all.mp4')]
         if not files:
-            # Fallback: check TASKS_STORE for any completed tasks with final_url
-            # This is useful if UPLOAD_FOLDER was cleared but server process is still running
-            # or if we want to rely on memory state
-            latest_task = None
-            latest_time = 0
-            
-            # This part is a bit tricky since we don't store timestamp in TASKS_STORE explicitly 
-            # other than in logs or if we parse group_id (uuid) which is not ordered.
-            # But let's assume if no local files, we might not find anything.
             return jsonify({'url': None})
             
-        # Sort by filename (which starts with timestamp) descending
         files.sort(reverse=True)
         latest_file = files[0]
-        
-        # Construct OBS URL
-        # Assuming obs_utils.upload_file returns a consistent URL format: http://obs.dimond.top/{filename}
         obs_url = f"http://obs.dimond.top/{latest_file}"
         
         return jsonify({'url': obs_url})
