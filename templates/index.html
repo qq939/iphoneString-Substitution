@@ -23,23 +23,22 @@
                         <button type="submit" name="action" value="remove">-</button>
                     </div>
                 </form>
-                <div class="output-area">
-                    <h3>BUFFER:</h3>
-                    <div class="substitution-content">
-                        {{ substitutions }}
-                    </div>
-                </div>
             </div>
         </div>
         
-        <!-- 格子 2: 空 (原 Character Upload 移走了) -->
+        <!-- 格子 2: BUFFER展示 (原 Sector 01 buffer) -->
         <div class="grid-item item-2">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <span class="placeholder">SECTOR 02</span>
+                <div class="output-area" style="height: 100%; display: flex; flex-direction: column;">
+                    <h3>BUFFER:</h3>
+                    <div class="substitution-content" style="flex-grow: 1; overflow-y: auto;">
+                        {{ substitutions }}
+                    </div>
+                </div>
             </div>
         </div>
 
