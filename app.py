@@ -651,57 +651,44 @@ def monitor_group_task(group_id):
             break
             
         if all_done:
-            print(f"Group {group_id} all tasks done. Concatenating...")
-            # Concatenate videos
-            try:
-                # Sort by segment index
-                sorted_tasks = sorted(group_data['tasks'], key=lambda x: x['segment_index'])
-                clips = []
-                for t in sorted_tasks:
-                    if t['result_path'] and os.path.exists(t['result_path']):
-                        clips.append(VideoFileClip(t['result_path']))
-                
-                if clips:
-                    final_clip = concatenate_videoclips(clips)
+            task_type = group_data.get('task_type', 'video_swap')
+            
+            if task_type == 'image_swap':
+                print(f"Group {group_id} (Image Swap) all tasks done. Extracting frame...")
+                try:
+                    # For image swap, we expect only 1 task
+                    if not group_data['tasks'] or not group_data['tasks'][0]['result_path']:
+                        raise Exception("No result video found for image swap")
+                        
+                    result_path = group_data['tasks'][0]['result_path']
                     
-                    # Merge audio back
-                    audio_path = group_data.get('audio_path')
-                    if audio_path and os.path.exists(audio_path):
-                        try:
-                            audio_clip = AudioFileClip(audio_path)
-                            video_duration = final_clip.duration
-                            audio_duration = audio_clip.duration
-                            
-                            if audio_duration < video_duration:
-                                # Loop audio
-                                audio_clip = afx.audio_loop(audio_clip, duration=video_duration)
-                            else:
-                                # Cut audio
-                                audio_clip = audio_clip.subclip(0, video_duration)
-                                
-                            final_clip = final_clip.set_audio(audio_clip)
-                            print(f"Merged audio from {audio_path}")
-                        except Exception as e:
-                            print(f"Failed to merge audio: {e}")
+                    if not os.path.exists(result_path):
+                        raise Exception(f"Result video not found at {result_path}")
+                        
+                    # Extract 5th frame
+                    # Frame 5 (0-indexed is 4)
+                    # We can use moviepy or ffmpeg
+                    # Let's use moviepy
+                    clip = VideoFileClip(result_path)
                     
-                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
-                    output_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                    # Write with audio if available
-                    final_clip.write_videofile(
-                        output_path, 
-                        codec='libx264', 
-                        audio_codec='aac' if final_clip.audio else None,
-                        audio=(final_clip.audio is not None)
-                    )
+                    # Ensure video is long enough. If < 5 frames, take last one.
+                    # fps is usually 25 or 30 from ComfyUI
+                    # t = 5 / clip.fps if clip.fps else 5/25
+                    # Or simpler: clip.get_frame(t)
                     
-                    # Close clips
-                    final_clip.close()
-                    for c in clips:
-                        c.close()
+                    # Let's try to get frame at index 4 (5th frame)
+                    # Time = 4 / clip.fps
+                    t = 4.0 / clip.fps if clip.fps else 4.0/25.0
+                    if t >= clip.duration:
+                        t = clip.duration - 0.01 # Take last frame if shorter
+                        
+                    frame_path = os.path.join(UPLOAD_FOLDER, datetime.now().strftime("%Y%m%d%H%M%Sone.png"))
+                    clip.save_frame(frame_path, t=t)
+                    clip.close()
                     
                     # Upload to OBS
-                    print(f"Uploading {output_path} to OBS...")
-                    obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
+                    print(f"Uploading {frame_path} to OBS...")
+                    obs_url = obs_utils.upload_file(frame_path, os.path.basename(frame_path), mime_type='image/png')
                     
                     if obs_url:
                         group_data['final_url'] = obs_url
@@ -709,20 +696,249 @@ def monitor_group_task(group_id):
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
-                else:
+                        
+                except Exception as e:
+                    print(f"Image swap post-processing error: {e}")
                     group_data['status'] = 'failed'
-                    group_data['error'] = 'No clips to concatenate'
+                    group_data['error'] = str(e)
                     
-            except Exception as e:
-                print(f"Concatenation error: {e}")
-                group_data['status'] = 'failed'
-                group_data['error'] = str(e)
+            else:
+                # Video Swap Logic
+                print(f"Group {group_id} all tasks done. Concatenating...")
+                # Concatenate videos
+                try:
+                    # Sort by segment index
+                    sorted_tasks = sorted(group_data['tasks'], key=lambda x: x['segment_index'])
+                    clips = []
+                    for t in sorted_tasks:
+                        if t['result_path'] and os.path.exists(t['result_path']):
+                            clips.append(VideoFileClip(t['result_path']))
+                    
+                    if clips:
+                        final_clip = concatenate_videoclips(clips)
+                        
+                        # Merge audio back
+                        audio_path = group_data.get('audio_path')
+                        if audio_path and os.path.exists(audio_path):
+                            try:
+                                audio_clip = AudioFileClip(audio_path)
+                                video_duration = final_clip.duration
+                                audio_duration = audio_clip.duration
+                                
+                                if audio_duration < video_duration:
+                                    # Loop audio
+                                    audio_clip = afx.audio_loop(audio_clip, duration=video_duration)
+                                else:
+                                    # Cut audio
+                                    audio_clip = audio_clip.subclip(0, video_duration)
+                                    
+                                final_clip = final_clip.set_audio(audio_clip)
+                                print(f"Merged audio from {audio_path}")
+                            except Exception as e:
+                                print(f"Failed to merge audio: {e}")
+                        
+                        output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
+                        output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                        # Write with audio if available
+                        final_clip.write_videofile(
+                            output_path, 
+                            codec='libx264', 
+                            audio_codec='aac' if final_clip.audio else None,
+                            audio=(final_clip.audio is not None)
+                        )
+                        
+                        # Close clips
+                        final_clip.close()
+                        for c in clips:
+                            c.close()
+                        
+                        # Upload to OBS
+                        print(f"Uploading {output_path} to OBS...")
+                        obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
+                        
+                        if obs_url:
+                            group_data['final_url'] = obs_url
+                            group_data['status'] = 'completed'
+                        else:
+                            group_data['status'] = 'failed'
+                            group_data['error'] = 'OBS upload failed'
+                    else:
+                        group_data['status'] = 'failed'
+                        group_data['error'] = 'No clips to concatenate'
+                        
+                except Exception as e:
+                    print(f"Concatenation error: {e}")
+                    group_data['status'] = 'failed'
+                    group_data['error'] = str(e)
             
             print(f"Group {group_id} finished with status {group_data['status']}")
             break
             
         # Wait 30 seconds
         time.sleep(30)
+
+@app.route('/upload_image_swap', methods=['POST'])
+def upload_image_swap():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No image file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+        
+    # Get workflow type
+    workflow_type = request.form.get('workflow_type', 'real') # 'real' or 'anime'
+
+    # Save uploaded image
+    filename = file.filename
+    # Add uuid to avoid conflict
+    file_id = str(uuid.uuid4())
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'png'
+    image_filename = f"image_swap_{file_id}.{ext}"
+    image_path = os.path.join(UPLOAD_FOLDER, image_filename)
+    file.save(image_path)
+    
+    # NEW: Download character from OBS
+    character_url = "http://obs.dimond.top/character.png"
+    character_path = os.path.join(UPLOAD_FOLDER, f"character_for_{image_filename}.png")
+    
+    try:
+        # Download character
+        with requests.get(character_url, stream=True) as r:
+            if r.status_code == 200:
+                with open(character_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            else:
+                return jsonify({'error': f"Failed to download character from {character_url}"}), 500
+    except Exception as e:
+        return jsonify({'error': f"Failed to download character: {e}"}), 500
+    
+    group_id = file_id # Reuse file_id as group_id
+    
+    TASKS_STORE[group_id] = {
+        'status': 'processing',
+        'tasks': [],
+        'created_at': time.time(),
+        'workflow_type': workflow_type,
+        'task_type': 'image_swap', # Special flag
+        'audio_path': None
+    }
+    
+    try:
+        # Create a 0.5s video from the image
+        # Using MoviePy ImageClip
+        # Duration 0.5s, FPS 30
+        from moviepy.editor import ImageClip
+        
+        # Resize logic: maintain aspect ratio, set height to 848 (same as video swap)
+        # Note: ImageClip resize
+        clip = ImageClip(image_path).set_duration(0.5).set_fps(30)
+        
+        # Resize
+        # If width/height are odd, ffmpeg might complain. Ensure even dimensions.
+        # But resize(height=848) handles aspect ratio.
+        clip_resized = clip.resize(height=848)
+        
+        # Write temp video
+        segment_filename = f"segment_{group_id}_0.mp4"
+        segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
+        
+        clip_resized.write_videofile(
+            segment_path, 
+            fps=30, 
+            codec='libx264', 
+            audio=False, 
+            logger=None
+        )
+        
+        clip.close()
+        clip_resized.close()
+        
+        # Submit to ComfyUI (Reuse video swap logic basically)
+        # Upload files to ComfyUI
+        comfy_seg = comfy_utils.client.upload_file(segment_path)
+        if not comfy_seg:
+            raise Exception("Failed to upload video segment")
+        
+        comfy_char = comfy_utils.client.upload_file(character_path)
+        if not comfy_char:
+            raise Exception("Failed to upload character")
+            
+        # Submit job with workflow_type
+        prompt_id, error = comfy_utils.queue_workflow_template(
+            comfy_char['name'], 
+            comfy_seg['name'], 
+            workflow_type=workflow_type
+        )
+        
+        if prompt_id:
+            TASKS_STORE[group_id]['tasks'].append({
+                'task_id': prompt_id,
+                'status': 'pending',
+                'segment_index': 0,
+                'result_path': None
+            })
+        else:
+            TASKS_STORE[group_id]['status'] = 'failed'
+            TASKS_STORE[group_id]['error'] = f"Failed to submit job: {error}"
+            return jsonify({'error': f"Failed to submit job: {error}"}), 500
+        
+        # Clean up segment file
+        if os.path.exists(segment_path):
+            os.remove(segment_path)
+            
+        # Clean up input image
+        if os.path.exists(image_path):
+            os.remove(image_path)
+            
+        # Clean up character file
+        if os.path.exists(character_path):
+            os.remove(character_path)
+            
+        # Start background monitor
+        thread = threading.Thread(target=monitor_group_task, args=(group_id,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'status': 'processing', 
+            'group_id': group_id, 
+            'message': 'Started image swap processing'
+        })
+        
+    except Exception as e:
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = str(e)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/latest_image', methods=['GET'])
+def get_latest_image():
+    """
+    Returns the URL of the latest generated image from OBS based on naming convention.
+    Naming convention: YYYYMMDDHHMMSSone.png
+    """
+    try:
+        # 1. Try to fetch from OBS directly (Stateless)
+        latest_file = get_latest_file_from_obs('one.png')
+        
+        if latest_file:
+            obs_url = f"http://obs.dimond.top/{latest_file}"
+            return jsonify({'url': obs_url, 'filename': latest_file})
+            
+        # 2. Fallback to local
+        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('one.png')]
+        if not files:
+            return jsonify({'url': None})
+            
+        files.sort(reverse=True)
+        latest_file = files[0]
+        obs_url = f"http://obs.dimond.top/{latest_file}"
+        
+        return jsonify({'url': obs_url, 'filename': latest_file})
+    except Exception as e:
+        print(f"Error fetching latest image: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/upload_and_cut', methods=['POST'])
 def upload_and_cut():

@@ -164,8 +164,45 @@
             </div>
         </div>
 
+        <!-- 格子 11: 图片换人 (新增) -->
+        <div class="grid-item item-11">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <h2>图片换人 <span id="comfyStatusDotImg" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
+                <form id="imgSwapForm" action="/upload_image_swap" method="post" enctype="multipart/form-data">
+                    <div style="margin-bottom: 5px;">
+                        <label style="margin-right: 10px;"><input type="radio" name="workflow_type" value="real" checked> 真人</label>
+                        <label><input type="radio" name="workflow_type" value="anime"> 动漫</label>
+                    </div>
+                    <input type="file" name="file" accept="image/*" class="upload-input">
+                    <button type="submit" id="imgSwapBtn" class="action-btn">EXECUTE</button>
+                </form>
+                <div id="imgSwapStatus" style="margin-top: 10px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;"></div>
+            </div>
+        </div>
+
+        <!-- 格子 12: 当前图片 (新增) -->
+        <div class="grid-item item-12">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前图片</a></h2>
+                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <img id="latestImagePreview" src="" style="max-width: 90%; max-height: 90%; border: 1px solid #00ff00; object-fit: contain; display: none;" 
+                         onload="this.style.display='block'" 
+                         onerror="this.style.display='none'">
+                    <div id="latestImageName" style="margin-top: 10px; font-size: 0.7em; word-break: break-all;"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- 其他格子占位 -->
-        {% for i in range(11, 17) %}
+        {% for i in range(13, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
@@ -432,6 +469,89 @@
         // Check for latest audio every 30 seconds
         updateLatestAudio();
         setInterval(updateLatestAudio, 30000);
+
+        // Image Swap Logic
+        document.getElementById('imgSwapForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('imgSwapStatus');
+            const btn = document.getElementById('imgSwapBtn');
+            
+            statusDiv.innerText = 'PROCESSING...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/upload_image_swap', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerText = `Started: ${data.group_id}\nMonitoring...`;
+                    pollImgSwapStatus(data.group_id);
+                } else {
+                    statusDiv.innerText = `Error: ${data.error}`;
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                statusDiv.innerText = `Error: ${err.message}`;
+                btn.disabled = false;
+            }
+        };
+
+        function pollImgSwapStatus(groupId) {
+            const statusDiv = document.getElementById('imgSwapStatus');
+            const btn = document.getElementById('imgSwapBtn');
+            
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/check_group_status/${groupId}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'completed') {
+                        clearInterval(interval);
+                        statusDiv.innerText = `COMPLETED\nURL: ${data.final_url}`;
+                        btn.disabled = false;
+                        updateLatestImage(); // Refresh preview
+                    } else if (data.status === 'failed') {
+                        clearInterval(interval);
+                        statusDiv.innerText = `FAILED: ${data.error}`;
+                        btn.disabled = false;
+                    } else {
+                        // processing
+                        statusDiv.innerText = `Processing...`;
+                    }
+                } catch (err) {
+                    console.error("Poll error", err);
+                }
+            }, 5000);
+        }
+
+        // Latest Image Logic
+        function updateLatestImage() {
+            fetch('/latest_image')
+                .then(r => r.json())
+                .then(data => {
+                    const img = document.getElementById('latestImagePreview');
+                    const name = document.getElementById('latestImageName');
+                    if (data.url) {
+                        // Add timestamp to prevent caching
+                        img.src = data.url + "?t=" + new Date().getTime();
+                        name.innerText = data.filename;
+                        img.style.display = 'block';
+                    } else {
+                        img.style.display = 'none';
+                        name.innerText = "No image found";
+                    }
+                })
+                .catch(e => console.error("Error fetching latest image:", e));
+        }
+        
+        // Initial load and poll
+        updateLatestImage();
+        setInterval(updateLatestImage, 30000);
 
     </script>
 </body>
