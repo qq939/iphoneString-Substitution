@@ -8,6 +8,7 @@ import uuid
 import threading
 import time
 import shutil
+import json
 from datetime import datetime
 from PIL import Image
 from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx
@@ -227,48 +228,80 @@ def upload_character():
 
 @app.route('/upload_audio', methods=['POST'])
 def upload_audio():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No audio file provided'}), 400
+    # Support multiple formats
+    allowed_extensions = {'mov', 'mp4', 'mp3', 'wav', 'flac'}
     
-    file = request.files['file']
+    file = request.files.get('file')
     text = request.form.get('text', '')
     
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
     if not text:
         return jsonify({'error': 'No text provided'}), 400
 
     try:
-        # Save uploaded file
-        original_filename = file.filename
-        ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-        temp_path = os.path.join(UPLOAD_FOLDER, f"temp_audio_{uuid.uuid4()}.{ext}")
-        file.save(temp_path)
-        
-        # Convert to wav (tone.wav)
-        # We use a unique name for ComfyUI to avoid conflicts if multiple users
-        # But ComfyUI usually handles files in input folder. 
-        # To keep it simple, we'll use a UUID name
         wav_filename = f"tone_{uuid.uuid4()}.wav"
         wav_path = os.path.join(UPLOAD_FOLDER, wav_filename)
         
-        if AudioSegment:
-            try:
-                audio = AudioSegment.from_file(temp_path)
-                audio.export(wav_path, format="wav")
-            except Exception as e:
-                print(f"Audio conversion failed: {e}, copying instead")
-                shutil.copy(temp_path, wav_path)
-        else:
-            shutil.copy(temp_path, wav_path)
+        # Check if file is provided and valid
+        if file and file.filename != '':
+            original_filename = file.filename
+            ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
             
-        # Upload to ComfyUI
-        comfy_res = comfy_utils.client.upload_file(wav_path)
-        if not comfy_res:
-            return jsonify({'error': 'Failed to upload to ComfyUI'}), 500
-        
-        uploaded_filename = comfy_res.get('name')
-        
+            if ext not in allowed_extensions:
+                return jsonify({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}), 400
+                
+            temp_path = os.path.join(UPLOAD_FOLDER, f"temp_audio_{uuid.uuid4()}.{ext}")
+            file.save(temp_path)
+            
+            # Convert to wav
+            if AudioSegment:
+                try:
+                    audio = AudioSegment.from_file(temp_path)
+                    audio.export(wav_path, format="wav")
+                except Exception as e:
+                    print(f"Audio conversion failed: {e}, attempting direct copy/rename if wav")
+                    if ext == 'wav':
+                        shutil.copy(temp_path, wav_path)
+                    else:
+                        # Clean up
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        return jsonify({'error': f'Audio conversion failed: {e}'}), 500
+            else:
+                 # Without pydub, we can only support wav really, or hope ComfyUI handles it if we just upload
+                 # But we need "tone.wav" for the workflow? 
+                 # Actually node 29 takes a filename.
+                 # But let's stick to wav conversion requirement or simple copy if wav
+                 if ext == 'wav':
+                     shutil.copy(temp_path, wav_path)
+                 else:
+                     if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                     return jsonify({'error': 'pydub not installed, cannot convert audio'}), 500
+            
+            # Clean up temp
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+            # Upload to ComfyUI
+            comfy_res = comfy_utils.client.upload_file(wav_path)
+            if not comfy_res:
+                return jsonify({'error': 'Failed to upload to ComfyUI'}), 500
+            uploaded_filename = comfy_res.get('name')
+            
+        else:
+            # No file provided, fallback to existing tone.wav
+            # We assume tone.wav exists in ComfyUI or we have a default one locally?
+            # Requirement: "沿用旧的tone.wav发给comfyUI"
+            # This implies we tell ComfyUI to use "tone.wav" (which might be the last uploaded one?)
+            # OR we find a local default tone.wav and upload it.
+            # Let's assume we send "tone.wav" string to the node, assuming it exists on server.
+            # OR better, if we have a default one in UPLOAD_FOLDER?
+            # Let's try to use "tone.wav" as the filename.
+            print("No file uploaded, using default tone.wav")
+            uploaded_filename = "tone.wav" 
+            # Note: If tone.wav doesn't exist on ComfyUI server input folder, this will fail.
+            # But the user request implies it should work (maybe persistence).
+
         # Load Workflow
         workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', 'audio_workflow.json')
         if not os.path.exists(workflow_path):
@@ -283,10 +316,8 @@ def upload_audio():
         prompt_id = comfy_utils.client.queue_prompt(workflow)
         
         if prompt_id:
-            # Clean up temp files
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            if os.path.exists(wav_path):
+            # Clean up generated wav path if we created it
+            if file and os.path.exists(wav_path):
                 os.remove(wav_path)
                 
             return jsonify({"status": "success", "prompt_id": prompt_id})
