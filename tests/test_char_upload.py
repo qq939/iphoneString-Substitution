@@ -27,7 +27,7 @@ def test_upload_character(client):
         mock_upload.return_value = "http://obs.dimond.top/character.png"
         
         data = {
-            'image': (img_byte_arr, 'test.jpg')
+            'file': (img_byte_arr, 'test.jpg')
         }
         
         response = client.post('/upload_character', data=data, content_type='multipart/form-data')

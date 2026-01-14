@@ -32,8 +32,19 @@
             </div>
         </div>
         
-        <!-- 格子 2: 角色上传 (原 Grid 4) -->
+        <!-- 格子 2: 空 (原 Character Upload 移走了) -->
         <div class="grid-item item-2">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <span class="placeholder">SECTOR 02</span>
+            </div>
+        </div>
+
+        <!-- 格子 3: 角色配置 (原 Grid 2) -->
+        <div class="grid-item item-3">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
@@ -49,14 +60,14 @@
             </div>
         </div>
 
-        <!-- 格子 3: 结果展示 & 角色预览 -->
-        <div class="grid-item item-3">
+        <!-- 格子 4: 结果展示 & 角色预览 (原 Grid 3) -->
+        <div class="grid-item item-4">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <span class="placeholder">SECTOR 03</span>
+                <span class="placeholder">SECTOR 04</span>
                 <div id="outputContainer" style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <!-- Character Preview (Initially Hidden) -->
                     <img id="charPreview" src="http://obs.dimond.top/character.png" 
@@ -65,17 +76,6 @@
                          onerror="this.style.display='none'">
                     <!-- Video Output will be injected here via JS -->
                 </div>
-            </div>
-        </div>
-
-        <!-- 格子 4: 空 (原 Grid 4 移走了) -->
-        <div class="grid-item item-4">
-            <div class="grid-controls">
-                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
-                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
-            </div>
-            <div class="grid-content">
-                <span class="placeholder">SECTOR 04</span>
             </div>
         </div>
 
@@ -275,11 +275,11 @@
                                  statusDiv.innerText = `PROCESSING... [${statusData.progress}]`;
                              } else if (statusData.status === 'completed') {
                                  clearInterval(pollInterval);
-                                statusDiv.innerText = 'SEQUENCE COMPLETED.\nESTABLISHING LINK TO SECTOR 03...';
+                                statusDiv.innerText = 'SEQUENCE COMPLETED.\nESTABLISHING LINK TO SECTOR 04...';
                                 btn.disabled = false;
                                 
-                                // Display video in Sector 03 (replacing character preview or appending?)
-                                // Request says Grid 3 should display the result. 
+                                // Display video in Sector 04 (replacing character preview or appending?)
+                                // Request says Grid 4 should display the result. 
                                 // We can replace the content of outputContainer or hide charPreview.
                                 const outputContainer = document.getElementById('outputContainer');
                                 const charPreview = document.getElementById('charPreview');
