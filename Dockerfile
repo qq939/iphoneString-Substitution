@@ -46,5 +46,5 @@ RUN cd /app && /app/venv/bin/pip install --upgrade pip && \
 EXPOSE 5015
 
 # Use the Python interpreter from the virtual environment to run the application
-CMD ["/bin/sh", "-c", "exec /app/venv/bin/python /app/app.py >> /var/log/iphonestring.log 2>&1"]
+CMD ["/bin/sh", "-c", "exec /app/venv/bin/python /app/app.py > /var/log/iphonestring.log 2>&1"]
     
