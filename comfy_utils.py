@@ -140,10 +140,22 @@ class ComfyUIClient:
             logger.info(f"POST {url} with workflow (truncated): {str(data)[:200]}...")
             
             req = urllib.request.Request(url, data=data_json)
+            # Add Content-Type header
+            req.add_header('Content-Type', 'application/json')
+            
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read())
                 logger.info(f"Queue prompt response: {result}")
                 return result.get('prompt_id')
+        except urllib.error.HTTPError as e:
+            logger.error(f"Queue prompt failed: HTTP Error {e.code}: {e.reason}")
+            # Try to read the error body
+            try:
+                error_body = e.read().decode('utf-8')
+                logger.error(f"Error body: {error_body}")
+            except:
+                pass
+            return None
         except Exception as e:
             logger.error(f"Queue prompt failed: {e}")
             return None
