@@ -452,38 +452,36 @@ def check_status(prompt_id):
                      video_files = outputs[target_node_id].get('videos', [])
                 if not video_files:
                      video_files = outputs[target_node_id].get('images', [])
+                if not video_files:
+                     # Check for audio files (for audio workflow)
+                     video_files = outputs[target_node_id].get('audio', [])
                 
                 if video_files:
-                    # Found video
+                    # Found output
                     file_info = video_files[0]
                     filename = file_info.get('filename')
                     subfolder = file_info.get('subfolder', '')
                     file_type = file_info.get('type', 'output')
                     
-                    # Download URL (or local path if we want to download it)
-                    # We should download it to our static folder
-                    # Return the download link
                     return "SUCCEEDED", {
                         "filename": filename,
                         "subfolder": subfolder,
                         "type": file_type
                     }
             
-            # If we didn't find the specific node, look for any video output
+            # If we didn't find the specific node, look for any output
             for node_id, node_output in outputs.items():
-                video_files = node_output.get('videos', []) + node_output.get('gifs', []) + node_output.get('images', [])
-                if video_files:
-                    # Check if it looks like a video file
-                    file_info = video_files[0]
-                    fname = file_info.get('filename', '').lower()
-                    if fname.endswith('.mp4') or fname.endswith('.mov') or fname.endswith('.webm') or fname.endswith('.gif'):
-                        return "SUCCEEDED", {
-                            "filename": file_info.get('filename'),
-                            "subfolder": file_info.get('subfolder', ''),
-                            "type": file_info.get('type', 'output')
-                        }
+                files = node_output.get('videos', []) + node_output.get('gifs', []) + node_output.get('images', []) + node_output.get('audio', [])
+                if files:
+                    file_info = files[0]
+                    # Just return the first file found
+                    return "SUCCEEDED", {
+                        "filename": file_info.get('filename'),
+                        "subfolder": file_info.get('subfolder', ''),
+                        "type": file_info.get('type', 'output')
+                    }
 
-            return "FAILED", "No output video found"
+            return "FAILED", "No output found"
             
         # If not in history, check queue
         status = client.is_task_running(prompt_id)
