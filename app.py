@@ -15,6 +15,11 @@ from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip,
 import comfy_utils
 import obs_utils
 
+# Add local bin directory to PATH for ffmpeg/ffprobe
+local_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
+if os.path.exists(local_bin):
+    os.environ["PATH"] += os.pathsep + local_bin
+
 try:
     from pydub import AudioSegment
 except ImportError:
