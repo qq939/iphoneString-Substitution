@@ -79,6 +79,25 @@ status_thread.start()
 # }
 TASKS_STORE = {}
 
+def modify_digital_human_workflow(workflow, image_filename, audio_filename):
+    """
+    Modifies the digital human video workflow JSON based on inputs.
+    """
+    # 1. Update Image (Node 49)
+    if "49" in workflow and "inputs" in workflow["49"]:
+        workflow["49"]["inputs"]["image"] = image_filename
+
+    # 2. Update Audio (Node 58)
+    if "58" in workflow and "inputs" in workflow["58"]:
+        workflow["58"]["inputs"]["audio"] = audio_filename
+        
+    # 3. Randomize Seed (Node 64)
+    import random
+    if "64" in workflow and "inputs" in workflow["64"]:
+        workflow["64"]["inputs"]["seed"] = random.randint(1, 1000000000000000)
+        
+    return workflow
+
 def get_substitutions():
     if not os.path.exists(SUBSTITUTION_FILE):
         return ""
@@ -374,6 +393,126 @@ def upload_audio():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+def process_digital_human_video(audio_path):
+    """
+    Background task to generate digital human video.
+    """
+    try:
+        print(f"Starting digital human video generation for audio: {audio_path}")
+        
+        # 1. Prepare Inputs
+        # Audio is already at audio_path (local)
+        
+        # Download Character from OBS
+        character_url = "http://obs.dimond.top/character.png"
+        character_filename = f"character_{uuid.uuid4()}.png"
+        character_path = os.path.join(UPLOAD_FOLDER, character_filename)
+        
+        print(f"Downloading character from {character_url}...")
+        try:
+            response = requests.get(character_url, stream=True, timeout=30)
+            if response.status_code == 200:
+                with open(character_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            else:
+                print(f"Failed to download character: {response.status_code}")
+                return
+        except Exception as e:
+            print(f"Error downloading character: {e}")
+            return
+
+        # 2. Upload to ComfyUI
+        print("Uploading files to ComfyUI...")
+        
+        # Upload Audio
+        comfy_audio = comfy_utils.client.upload_file(audio_path)
+        if not comfy_audio:
+            print("Failed to upload audio to ComfyUI")
+            return
+        uploaded_audio_name = comfy_audio.get('name')
+        
+        # Upload Image
+        comfy_image = comfy_utils.client.upload_file(character_path)
+        if not comfy_image:
+            print("Failed to upload image to ComfyUI")
+            return
+        uploaded_image_name = comfy_image.get('name')
+        
+        # 3. Load and Modify Workflow
+        workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '数字人video_humo.json')
+        if not os.path.exists(workflow_path):
+            print("Digital human workflow file not found")
+            return
+            
+        with open(workflow_path, 'r', encoding='utf-8') as f:
+            workflow = json.load(f)
+            
+        workflow = modify_digital_human_workflow(workflow, uploaded_image_name, uploaded_audio_name)
+        
+        # 4. Submit Task
+        print("Submitting digital human task to ComfyUI...")
+        prompt_id = comfy_utils.client.queue_prompt(workflow)
+        
+        if not prompt_id:
+            print("Failed to queue digital human prompt")
+            return
+            
+        print(f"Digital human task queued with ID: {prompt_id}")
+        
+        # 5. Monitor Task
+        while True:
+            time.sleep(30) # Check every 30 seconds
+            
+            try:
+                status, result = comfy_utils.check_status(prompt_id)
+                print(f"Digital human task {prompt_id} status: {status}")
+                
+                if status == 'SUCCEEDED':
+                    # Download result
+                    if isinstance(result, dict):
+                        print("Task succeeded, downloading result...")
+                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+                        
+                        if local_path:
+                            # Upload to OBS
+                            output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
+                            print(f"Uploading result to OBS as {output_filename}...")
+                            
+                            obs_url = obs_utils.upload_file(local_path, output_filename, mime_type='video/mp4')
+                            
+                            if obs_url:
+                                print(f"Digital human video successfully uploaded: {obs_url}")
+                                
+                                # Rename local file to match OBS name for /latest_video
+                                local_renamed_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                                if os.path.exists(local_path):
+                                    os.rename(local_path, local_renamed_path)
+                            else:
+                                print("Failed to upload digital human video to OBS")
+                        else:
+                            print("Failed to download digital human video result")
+                    else:
+                        print("Invalid digital human result format")
+                    break
+                    
+                elif status == 'FAILED':
+                    print(f"Digital human task failed: {result}")
+                    break
+                    
+            except Exception as e:
+                print(f"Error monitoring digital human task: {e}")
+                # Don't break immediately on error, retry next loop
+                
+        # Cleanup
+        if os.path.exists(character_path):
+            os.remove(character_path)
+            
+    except Exception as e:
+        print(f"Process digital human video error: {e}")
+        import traceback
+        traceback.print_exc()
+
 @app.route('/check_audio_status/<prompt_id>', methods=['GET'])
 def check_audio_status(prompt_id):
     try:
@@ -395,6 +534,13 @@ def check_audio_status(prompt_id):
                         os.rename(local_path, local_renamed_path)
                     
                     if obs_url:
+                        # Trigger Digital Human Video Generation (Stage 2)
+                        # We do this in a background thread to avoid blocking the response
+                        print(f"Audio upload successful. Triggering digital human video generation with {local_renamed_path}")
+                        thread = threading.Thread(target=process_digital_human_video, args=(local_renamed_path,))
+                        thread.daemon = True
+                        thread.start()
+                        
                         return jsonify({'status': 'completed', 'url': obs_url})
                     else:
                         return jsonify({'status': 'failed', 'error': 'Failed to upload to OBS'})
