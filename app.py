@@ -322,14 +322,20 @@ def upload_audio():
         
         if prompt_id:
             # Clean up generated wav path if we created it
-            if file and os.path.exists(wav_path):
-                os.remove(wav_path)
+            if file and file.filename != '' and os.path.exists(wav_path):
+                try:
+                    os.remove(wav_path)
+                except OSError:
+                    pass
                 
             return jsonify({"status": "success", "prompt_id": prompt_id})
         else:
             return jsonify({"error": "Failed to queue prompt"}), 500
 
     except Exception as e:
+        # Print full traceback for debugging
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/check_audio_status/<prompt_id>', methods=['GET'])
