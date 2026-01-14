@@ -750,8 +750,18 @@ def get_latest_video():
         # 1. List files in local UPLOAD_FOLDER and find the latest 'all.mp4'
         # 2. Assume the filename format allows sorting
         
+        # Check local folder for files
         files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('all.mp4')]
         if not files:
+            # Fallback: check TASKS_STORE for any completed tasks with final_url
+            # This is useful if UPLOAD_FOLDER was cleared but server process is still running
+            # or if we want to rely on memory state
+            latest_task = None
+            latest_time = 0
+            
+            # This part is a bit tricky since we don't store timestamp in TASKS_STORE explicitly 
+            # other than in logs or if we parse group_id (uuid) which is not ordered.
+            # But let's assume if no local files, we might not find anything.
             return jsonify({'url': None})
             
         # Sort by filename (which starts with timestamp) descending

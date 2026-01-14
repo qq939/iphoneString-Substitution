@@ -34,7 +34,6 @@
             </div>
             <div class="grid-content">
                 <div class="output-area" style="height: 100%; display: flex; flex-direction: column;">
-                    <h3>BUFFER:</h3>
                     <div class="substitution-content" style="flex-grow: 1; overflow-y: auto;">
                         {{ substitutions }}
                     </div>
@@ -50,6 +49,7 @@
             </div>
             <div class="grid-content">
                 <h2>角色配置</h2>
+                <div style="margin-top: 5px; font-size: 0.8rem; color: #ff0000;">当前角色</div>
                 <form id="charUploadForm" action="/upload_character" method="post" enctype="multipart/form-data">
                     <input type="file" name="file" accept="image/png, image/jpeg, image/webp" 
                            class="upload-input">
@@ -66,7 +66,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <span class="placeholder">SECTOR 04</span>
+                <span class="placeholder">当前角色</span>
                 <div id="outputContainer" style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <!-- Character Preview (Initially Hidden) -->
                     <img id="charPreview" src="http://obs.dimond.top/character.png" 
@@ -102,7 +102,7 @@
             </div>
             <div class="grid-content">
                 <a href="http://obs.dimond.top" target="_blank" style="display: block; width: 100%; height: 100%; text-decoration: none; position: relative;">
-                    <video id="latestVideoPreview" autoplay muted loop style="width: 100%; height: 100%; object-fit: cover; border: 1px solid #00ff00;">
+                    <video id="latestVideoPreview" autoplay muted loop controls style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #00ff00;">
                         Your browser does not support the video tag.
                     </video>
                     <div style="position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.7); color: #00ff00; font-size: 0.7em; padding: 2px 5px;">
@@ -138,7 +138,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>LATEST AUDIO</h2>
+                <h2>当前音频</h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <audio id="latestAudioPreview" controls style="width: 90%;">
                         Your browser does not support the audio element.

@@ -101,7 +101,7 @@ button[value="remove"]:hover {
     margin-top: 20px;
     flex-grow: 1;
     overflow-y: auto;
-    border-top: 1px dashed var(--text-color);
+    /* border-top: 1px dashed var(--text-color); */
     padding-top: 10px;
 }
 
