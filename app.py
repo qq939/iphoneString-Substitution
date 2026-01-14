@@ -119,7 +119,9 @@ def modify_audio_workflow(workflow, text, filename):
     # 3. Randomize seed (Node 27)
     import random
     if "27" in workflow and "inputs" in workflow["27"]:
-        workflow["27"]["inputs"]["seed"] = random.randint(1, 1000000000000000)
+        # Max seed for 32-bit/safe integer in some contexts is 2^32 - 1 = 4294967295
+        # The error says "Value ... bigger than max of 4294967295"
+        workflow["27"]["inputs"]["seed"] = random.randint(1, 4294967295)
         
     return workflow
 
