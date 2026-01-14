@@ -78,6 +78,9 @@ status_thread.start()
 #   }
 # }
 TASKS_STORE = {}
+# Store audio task state to prevent duplicate stage 2 processing
+# { prompt_id: {'status': 'pending'|'processing_result'|'completed', 'url': '...'} }
+AUDIO_TASKS = {}
 
 def modify_digital_human_workflow(workflow, image_filename, audio_filename):
     """
@@ -375,6 +378,12 @@ def upload_audio():
         prompt_id = comfy_utils.client.queue_prompt(workflow)
         
         if prompt_id:
+            # Register audio task
+            AUDIO_TASKS[prompt_id] = {
+                'status': 'pending',
+                'url': None
+            }
+            
             # Clean up generated wav path if we created it
             if file and file.filename != '' and os.path.exists(wav_path):
                 try:
@@ -633,10 +642,24 @@ def process_digital_human_video(audio_path):
 
 @app.route('/check_audio_status/<prompt_id>', methods=['GET'])
 def check_audio_status(prompt_id):
+    # Check if we already processed this task
+    task_data = AUDIO_TASKS.get(prompt_id)
+    if task_data:
+        if task_data['status'] == 'completed' and task_data['url']:
+            return jsonify({'status': 'completed', 'url': task_data['url']})
+        if task_data['status'] == 'processing_result':
+            return jsonify({'status': 'processing'}) # Still working on result
+
     try:
         status, result = comfy_utils.check_status(prompt_id)
         
         if status == 'SUCCEEDED':
+            # Mark as processing to prevent re-entry
+            if prompt_id in AUDIO_TASKS:
+                AUDIO_TASKS[prompt_id]['status'] = 'processing_result'
+            else:
+                AUDIO_TASKS[prompt_id] = {'status': 'processing_result', 'url': None}
+
             # Download result
             if isinstance(result, dict):
                 local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
@@ -652,6 +675,10 @@ def check_audio_status(prompt_id):
                         os.rename(local_path, local_renamed_path)
                     
                     if obs_url:
+                        # Update task state
+                        AUDIO_TASKS[prompt_id]['status'] = 'completed'
+                        AUDIO_TASKS[prompt_id]['url'] = obs_url
+                        
                         # Trigger Digital Human Video Generation (Stage 2)
                         # We do this in a background thread to avoid blocking the response
                         print(f"Audio upload successful. Triggering digital human video generation with {local_renamed_path}")
@@ -661,12 +688,17 @@ def check_audio_status(prompt_id):
                         
                         return jsonify({'status': 'completed', 'url': obs_url})
                     else:
+                        AUDIO_TASKS[prompt_id]['status'] = 'failed'
                         return jsonify({'status': 'failed', 'error': 'Failed to upload to OBS'})
                 else:
+                    AUDIO_TASKS[prompt_id]['status'] = 'failed'
                     return jsonify({'status': 'failed', 'error': 'Failed to download result'})
             else:
+                AUDIO_TASKS[prompt_id]['status'] = 'failed'
                 return jsonify({'status': 'failed', 'error': 'Invalid result format'})
         elif status == 'FAILED':
+             if prompt_id in AUDIO_TASKS:
+                 AUDIO_TASKS[prompt_id]['status'] = 'failed'
              return jsonify({'status': 'failed', 'error': str(result)})
         else:
              return jsonify({'status': status})
