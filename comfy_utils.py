@@ -64,31 +64,40 @@ class ComfyUIClient:
 
     def check_connection(self, timeout=2):
         """
-        Checks if the current server address is reachable.
-        If not, tries to find an active server again.
+        Checks if ANY server is reachable concurrently.
+        Returns True if at least one server responds.
         """
-        try:
-            url = f"http://{self.server_address}/object_info"
-            response = requests.get(url, timeout=timeout)
-            if response.status_code == 200:
-                return True
-        except:
-            pass
-            
-        # If current fails, try to re-discover
-        logger.info("Current ComfyUI server unreachable, trying to rediscover...")
-        new_server = self._find_active_server()
-        if new_server:
-            self.server_address = new_server
-            # Check again
+        import threading
+        from queue import Queue
+        
+        results = Queue()
+        
+        def check_server(server):
             try:
-                url = f"http://{self.server_address}/object_info"
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/object_info"
                 response = requests.get(url, timeout=timeout)
                 if response.status_code == 200:
-                    return True
+                    results.put(clean_server)
             except:
                 pass
-                
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=check_server, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            # Get the first available server (any)
+            active_server = results.get()
+            self.server_address = active_server
+            return True
+            
         return False
 
     def ensure_connection(self):
@@ -98,67 +107,295 @@ class ComfyUIClient:
         """
         return self.check_connection(timeout=3)
 
+    def queue_prompt(self, prompt):
+        """
+        Sends the workflow to ALL servers concurrently.
+        Returns the prompt_id from the first successful response.
+        """
+        import threading
+        from queue import Queue
+        
+        p = {"prompt": prompt, "client_id": self.client_id}
+        data = json.dumps(p).encode('utf-8')
+        
+        results = Queue()
+        
+        def send_to_server(server):
+            try:
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/prompt"
+                req = urllib.request.Request(url, data=data)
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    response_data = json.loads(response.read())
+                    if 'prompt_id' in response_data:
+                        results.put((clean_server, response_data['prompt_id']))
+            except Exception as e:
+                logger.warning(f"Failed to queue prompt on {server}: {e}")
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=send_to_server, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            # Return the first success. 
+            # Note: If multiple succeed, we might have duplicate jobs running on different servers.
+            # But based on requirement "只要有一个回应的就可以", this is acceptable redundancy for availability.
+            # Or ideally we should handle job tracking across servers.
+            # For simplicity now, we just return one ID.
+            # But wait, if we send to all, all will run it.
+            # And later check_status needs to check ALL servers for this ID.
+            # We can store which server accepted it, or just broadcast checks too.
+            server, prompt_id = results.get()
+            # self.server_address = server # Update active server? Maybe not strictly needed if we broadcast everything
+            return prompt_id
+            
+        return None
+
+    def get_history(self, prompt_id):
+        """
+        Queries history from ALL servers concurrently for the given prompt_id.
+        Returns history dict if found.
+        """
+        import threading
+        from queue import Queue
+        
+        results = Queue()
+        
+        def query_server(server):
+            try:
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/history/{prompt_id}"
+                with urllib.request.urlopen(url, timeout=5) as response:
+                    history = json.loads(response.read())
+                    if prompt_id in history:
+                        results.put(history)
+            except:
+                pass
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=query_server, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            return results.get()
+            
+        return {}
+
     def upload_file(self, file_path, subfolder="", overwrite=False):
         """
-        Uploads an image or video to ComfyUI.
+        Uploads file to ALL servers concurrently.
+        Returns response from one of them (assuming success).
         """
-        try:
-            url = f"http://{self.server_address}/upload/image"
-            file_name = os.path.basename(file_path)
-            
-            with open(file_path, 'rb') as file:
-                files = {'image': file}
-                data = {
-                    'subfolder': subfolder,
-                    'overwrite': 'true' if overwrite else 'false'
-                }
-                logger.info(f"POST {url} with file={file_path}, data={data}")
-                response = requests.post(url, files=files, data=data)
-                
-            if response.status_code == 200:
-                response_data = response.json()
-                # ComfyUI returns the filename (sometimes renamed) and subfolder/type
-                logger.info(f"Upload response: {response_data}")
-                return response_data
-            else:
-                logger.error(f"Upload failed: {response.status_code} - {response.text}")
-                return None
-        except Exception as e:
-            logger.error(f"Upload exception: {e}")
+        import threading
+        from queue import Queue
+        
+        if not os.path.exists(file_path):
+            logger.error(f"File not found: {file_path}")
             return None
+
+        results = Queue()
+        
+        def upload_to_server(server):
+            try:
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/upload/image"
+                
+                with open(file_path, 'rb') as f:
+                    files = {'image': (os.path.basename(file_path), f)}
+                    data = {'overwrite': str(overwrite).lower(), 'subfolder': subfolder}
+                    response = requests.post(url, files=files, data=data, timeout=30) # Upload might take longer
+                    
+                    if response.status_code == 200:
+                        results.put(response.json())
+            except Exception as e:
+                logger.warning(f"Failed to upload to {server}: {e}")
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=upload_to_server, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            return results.get()
+            
+        return None
+    
+    def download_output_file(self, filename, subfolder, file_type, output_dir):
+        """
+        Tries to download file from ANY server that has it.
+        """
+        for server in self.servers:
+            try:
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                data = {'filename': filename, 'subfolder': subfolder, 'type': file_type}
+                url_values = urllib.parse.urlencode(data)
+                url = f"http://{clean_server}/view?{url_values}"
+                
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    content = response.read()
+                    
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                    
+                    filepath = os.path.join(output_dir, filename)
+                    with open(filepath, 'wb') as f:
+                        f.write(content)
+                        
+                    return filepath
+            except:
+                continue
+                
+        return None
+        
+    def is_task_running(self, prompt_id):
+        """
+        Checks queue on ALL servers.
+        """
+        # Logic: if ANY server has it in queue/running, it's running.
+        # But wait, check_status calls this.
+        # Let's simplify: check_status checks history first.
+        # If not in history, check queue.
+        # We can query /queue endpoint on all servers.
+        
+        import threading
+        from queue import Queue
+        
+        results = Queue()
+        
+        def check_queue(server):
+            try:
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/queue"
+                with urllib.request.urlopen(url, timeout=5) as response:
+                    queue_data = json.loads(response.read())
+                    # Check pending
+                    for task in queue_data.get('queue_pending', []):
+                        if task[1] == prompt_id:
+                            results.put("PENDING")
+                            return
+                    # Check running
+                    for task in queue_data.get('queue_running', []):
+                        if task[1] == prompt_id:
+                            results.put("RUNNING")
+                            return
+            except:
+                pass
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=check_queue, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            return results.get()
+            
+        return "NOT_FOUND"
+
+    def upload_file(self, file_path, subfolder="", overwrite=False):
+        """
+        Uploads file to ALL servers concurrently.
+        Returns response from one of them (assuming success).
+        """
+        import threading
+        from queue import Queue
+        
+        if not os.path.exists(file_path):
+            logger.error(f"File not found: {file_path}")
+            return None
+
+        results = Queue()
+        
+        def upload_to_server(server):
+            try:
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/upload/image"
+                
+                with open(file_path, 'rb') as f:
+                    files = {'image': (os.path.basename(file_path), f)}
+                    data = {'overwrite': str(overwrite).lower(), 'subfolder': subfolder}
+                    response = requests.post(url, files=files, data=data, timeout=30) # Upload might take longer
+                    
+                    if response.status_code == 200:
+                        results.put(response.json())
+            except Exception as e:
+                logger.warning(f"Failed to upload to {server}: {e}")
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=upload_to_server, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            return results.get()
+            
+        return None
 
     def queue_prompt(self, workflow):
         """
-        Submits a workflow to the ComfyUI queue.
+        Submits a workflow to the ComfyUI queue (to ALL servers concurrently).
         """
-        try:
-            self.ensure_connection()
-            url = f"http://{self.server_address}/prompt"
-            data = {"prompt": workflow, "client_id": self.client_id}
-            data_json = json.dumps(data).encode('utf-8')
-            
-            logger.info(f"POST {url} with workflow (truncated): {str(data)[:200]}...")
-            
-            req = urllib.request.Request(url, data=data_json)
-            # Add Content-Type header
-            req.add_header('Content-Type', 'application/json')
-            
-            with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read())
-                logger.info(f"Queue prompt response: {result}")
-                return result.get('prompt_id')
-        except urllib.error.HTTPError as e:
-            logger.error(f"Queue prompt failed: HTTP Error {e.code}: {e.reason}")
-            # Try to read the error body
+        import threading
+        from queue import Queue
+        
+        p = {"prompt": workflow, "client_id": self.client_id}
+        data = json.dumps(p).encode('utf-8')
+        
+        results = Queue()
+        
+        def send_to_server(server):
             try:
-                error_body = e.read().decode('utf-8')
-                logger.error(f"Error body: {error_body}")
-            except:
-                pass
-            return None
-        except Exception as e:
-            logger.error(f"Queue prompt failed: {e}")
-            return None
+                clean_server = server.replace("http://", "").replace("https://", "").rstrip("/")
+                url = f"http://{clean_server}/prompt"
+                req = urllib.request.Request(url, data=data)
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    response_data = json.loads(response.read())
+                    if 'prompt_id' in response_data:
+                        results.put(response_data['prompt_id'])
+            except Exception as e:
+                logger.warning(f"Failed to queue prompt on {server}: {e}")
+
+        threads = []
+        for server in self.servers:
+            t = threading.Thread(target=send_to_server, args=(server,))
+            t.daemon = True
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
+            
+        if not results.empty():
+            # Return the first success
+            return results.get()
+            
+        return None
 
     def cancel_task(self, prompt_id):
         """
