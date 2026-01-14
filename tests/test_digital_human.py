@@ -29,13 +29,37 @@ def test_modify_workflow():
     assert modified_workflow["58"]["inputs"]["audio"] == audio_filename, "Audio filename not updated"
     
     # Check Seed Randomization (Node 64)
-    # Note: original seed is 1067760026265042. We check if it's changed (very likely)
-    # and within range.
+    # New logic: Seed should be 0
     new_seed = modified_workflow["64"]["inputs"]["seed"]
-    assert isinstance(new_seed, int), "Seed should be an integer"
-    assert 1 <= new_seed <= 1000000000000000, "Seed out of range"
+    assert new_seed == 0, "Seed should be 0"
     
     print("Workflow modification test passed!")
 
+def test_audio_slicing_logic():
+    # This test simulates the audio slicing logic without actually processing heavy files
+    # We can mock AudioFileClip or just verify the math
+    
+    total_duration = 25 # seconds
+    segment_duration = 10
+    
+    import math
+    num_segments = math.ceil(total_duration / segment_duration)
+    
+    assert num_segments == 3, f"Expected 3 segments, got {num_segments}"
+    
+    # Verify time ranges
+    segments = []
+    for i in range(num_segments):
+        start_time = i * segment_duration
+        end_time = min((i + 1) * segment_duration, total_duration)
+        segments.append((start_time, end_time))
+        
+    assert segments[0] == (0, 10)
+    assert segments[1] == (10, 20)
+    assert segments[2] == (20, 25)
+    
+    print("Audio slicing logic test passed!")
+
 if __name__ == "__main__":
     test_modify_workflow()
+    test_audio_slicing_logic()

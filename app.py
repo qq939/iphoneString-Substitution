@@ -91,10 +91,9 @@ def modify_digital_human_workflow(workflow, image_filename, audio_filename):
     if "58" in workflow and "inputs" in workflow["58"]:
         workflow["58"]["inputs"]["audio"] = audio_filename
         
-    # 3. Randomize Seed (Node 64)
-    import random
+    # 3. Randomize Seed (Node 64) -> Set to 0 as requested
     if "64" in workflow and "inputs" in workflow["64"]:
-        workflow["64"]["inputs"]["seed"] = random.randint(1, 1000000000000000)
+        workflow["64"]["inputs"]["seed"] = 0
         
     return workflow
 
@@ -422,91 +421,210 @@ def process_digital_human_video(audio_path):
             print(f"Error downloading character: {e}")
             return
 
-        # 2. Upload to ComfyUI
+        # 2. Upload to ComfyUI (Image)
         print("Uploading files to ComfyUI...")
         
-        # Upload Audio
-        comfy_audio = comfy_utils.client.upload_file(audio_path)
-        if not comfy_audio:
-            print("Failed to upload audio to ComfyUI")
-            return
-        uploaded_audio_name = comfy_audio.get('name')
-        
-        # Upload Image
+        # Upload Image (Common for all segments)
         comfy_image = comfy_utils.client.upload_file(character_path)
         if not comfy_image:
             print("Failed to upload image to ComfyUI")
             return
         uploaded_image_name = comfy_image.get('name')
         
-        # 3. Load and Modify Workflow
-        workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '数字人video_humo.json')
-        if not os.path.exists(workflow_path):
-            print("Digital human workflow file not found")
+        # 3. Audio Slicing and Multi-Task Submission
+        # Load audio using MoviePy to get duration and slice
+        if not os.path.exists(audio_path):
+            print(f"Audio file not found: {audio_path}")
             return
             
-        with open(workflow_path, 'r', encoding='utf-8') as f:
-            workflow = json.load(f)
+        try:
+            audio_clip = AudioFileClip(audio_path)
+            duration = audio_clip.duration
+            segment_duration = 10 # 10 seconds per segment
+            num_segments = math.ceil(duration / segment_duration)
             
-        workflow = modify_digital_human_workflow(workflow, uploaded_image_name, uploaded_audio_name)
-        
-        # 4. Submit Task
-        print("Submitting digital human task to ComfyUI...")
-        prompt_id = comfy_utils.client.queue_prompt(workflow)
-        
-        if not prompt_id:
-            print("Failed to queue digital human prompt")
+            print(f"Audio duration: {duration}s, Slicing into {num_segments} segments...")
+            
+            tasks = [] # List to store prompt_ids and segment info
+            
+            # Load Workflow Template
+            workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '数字人video_humo.json')
+            if not os.path.exists(workflow_path):
+                print("Digital human workflow file not found")
+                return
+                
+            with open(workflow_path, 'r', encoding='utf-8') as f:
+                workflow_template = json.load(f)
+            
+            for i in range(num_segments):
+                start_time = i * segment_duration
+                end_time = min((i + 1) * segment_duration, duration)
+                
+                # Create Audio Segment
+                sub_audio = audio_clip.subclip(start_time, end_time)
+                segment_audio_filename = f"dh_audio_{uuid.uuid4()}_{i}.wav"
+                segment_audio_path = os.path.join(UPLOAD_FOLDER, segment_audio_filename)
+                
+                # Write audio segment
+                sub_audio.write_audiofile(segment_audio_path, logger=None)
+                
+                # Upload Audio Segment
+                comfy_audio_seg = comfy_utils.client.upload_file(segment_audio_path)
+                if not comfy_audio_seg:
+                    print(f"Failed to upload audio segment {i}")
+                    # Should we fail all or continue? Let's fail for now to keep logic simple
+                    raise Exception(f"Failed to upload audio segment {i}")
+                
+                uploaded_audio_seg_name = comfy_audio_seg.get('name')
+                
+                # Modify Workflow for this segment
+                # Deep copy to avoid modifying template for other iterations
+                import copy
+                current_workflow = copy.deepcopy(workflow_template)
+                current_workflow = modify_digital_human_workflow(current_workflow, uploaded_image_name, uploaded_audio_seg_name)
+                
+                # Submit Task
+                print(f"Submitting digital human task for segment {i}...")
+                prompt_id = comfy_utils.client.queue_prompt(current_workflow)
+                
+                if not prompt_id:
+                    raise Exception(f"Failed to queue prompt for segment {i}")
+                    
+                print(f"Segment {i} queued with ID: {prompt_id}")
+                
+                tasks.append({
+                    'prompt_id': prompt_id,
+                    'index': i,
+                    'audio_path': segment_audio_path,
+                    'result_path': None,
+                    'status': 'pending'
+                })
+                
+                # Clean up local audio segment file? Maybe keep for debug or if needed later?
+                # We can clean up after task is done or if upload is confirmed.
+                # Since we uploaded, we can delete local.
+                # But wait, if we fail later, we might want to retry? 
+                # Let's keep it until task completion or error cleanup.
+                
+            audio_clip.close()
+            
+        except Exception as e:
+            print(f"Error during audio slicing/submission: {e}")
             return
-            
-        print(f"Digital human task queued with ID: {prompt_id}")
+
+        # 5. Monitor Tasks (Wait for ALL to complete)
+        print("Monitoring digital human tasks...")
         
-        # 5. Monitor Task
         while True:
-            time.sleep(30) # Check every 30 seconds
+            all_done = True
+            any_failed = False
             
-            try:
-                status, result = comfy_utils.check_status(prompt_id)
-                print(f"Digital human task {prompt_id} status: {status}")
-                
-                if status == 'SUCCEEDED':
-                    # Download result
-                    if isinstance(result, dict):
-                        print("Task succeeded, downloading result...")
-                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
-                        
-                        if local_path:
-                            # Upload to OBS
-                            output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
-                            print(f"Uploading result to OBS as {output_filename}...")
-                            
-                            obs_url = obs_utils.upload_file(local_path, output_filename, mime_type='video/mp4')
-                            
-                            if obs_url:
-                                print(f"Digital human video successfully uploaded: {obs_url}")
-                                
-                                # Rename local file to match OBS name for /latest_video
-                                local_renamed_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                                if os.path.exists(local_path):
-                                    os.rename(local_path, local_renamed_path)
+            for task in tasks:
+                if task['status'] == 'completed':
+                    continue
+                    
+                if task['status'] == 'failed':
+                    any_failed = True
+                    continue
+                    
+                try:
+                    status, result = comfy_utils.check_status(task['prompt_id'])
+                    # print(f"Task {task['prompt_id']} status: {status}")
+                    
+                    if status == 'SUCCEEDED':
+                        if isinstance(result, dict):
+                            print(f"Task {task['index']} succeeded, downloading...")
+                            local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+                            if local_path:
+                                task['result_path'] = local_path
+                                task['status'] = 'completed'
                             else:
-                                print("Failed to upload digital human video to OBS")
+                                task['status'] = 'failed'
+                                any_failed = True
                         else:
-                            print("Failed to download digital human video result")
+                            task['status'] = 'failed'
+                            any_failed = True
+                    elif status == 'FAILED':
+                        task['status'] = 'failed'
+                        any_failed = True
                     else:
-                        print("Invalid digital human result format")
-                    break
-                    
-                elif status == 'FAILED':
-                    print(f"Digital human task failed: {result}")
-                    break
-                    
-            except Exception as e:
-                print(f"Error monitoring digital human task: {e}")
-                # Don't break immediately on error, retry next loop
+                        all_done = False
+                        
+                except Exception as e:
+                    print(f"Error checking task {task['prompt_id']}: {e}")
+                    all_done = False # Retry later
+            
+            if any_failed:
+                print("One or more digital human segments failed. Aborting.")
+                break
                 
+            if all_done:
+                print("All digital human segments completed. Concatenating...")
+                
+                # Sort by index
+                sorted_tasks = sorted(tasks, key=lambda x: x['index'])
+                
+                clips = []
+                try:
+                    for t in sorted_tasks:
+                        if t['result_path'] and os.path.exists(t['result_path']):
+                            clips.append(VideoFileClip(t['result_path']))
+                            
+                    if clips:
+                        final_clip = concatenate_videoclips(clips)
+                        
+                        output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
+                        output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                        
+                        # Write concatenated video
+                        # We should ensure audio is correct. ComfyUI output should have audio sync with the segment input.
+                        # Concatenating clips with audio should preserve it.
+                        final_clip.write_videofile(
+                            output_path, 
+                            codec='libx264', 
+                            audio_codec='aac',
+                            logger=None
+                        )
+                        
+                        # Close clips
+                        final_clip.close()
+                        for c in clips:
+                            c.close()
+                            
+                        # Upload to OBS
+                        print(f"Uploading result to OBS as {output_filename}...")
+                        obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
+                        
+                        if obs_url:
+                            print(f"Digital human video successfully uploaded: {obs_url}")
+                            # Rename local file
+                            local_renamed_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                            if os.path.exists(output_path): # output_path is already the target name
+                                pass 
+                        else:
+                            print("Failed to upload digital human video to OBS")
+                    else:
+                        print("No clips to concatenate")
+                        
+                except Exception as e:
+                    print(f"Error during concatenation: {e}")
+                
+                break
+                
+            time.sleep(30)
+            
         # Cleanup
         if os.path.exists(character_path):
             os.remove(character_path)
+        
+        # Clean up segment files
+        for task in tasks:
+            if task.get('audio_path') and os.path.exists(task['audio_path']):
+                os.remove(task['audio_path'])
+            if task.get('result_path') and os.path.exists(task['result_path']):
+                # Maybe keep result path or delete?
+                # Since we have the final concatenated file, we can delete segments.
+                os.remove(task['result_path'])
             
     except Exception as e:
         print(f"Process digital human video error: {e}")
