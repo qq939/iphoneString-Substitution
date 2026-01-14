@@ -294,18 +294,36 @@ def upload_audio():
             uploaded_filename = comfy_res.get('name')
             
         else:
-            # No file provided, fallback to existing tone.wav
-            # We assume tone.wav exists in ComfyUI or we have a default one locally?
-            # Requirement: "沿用旧的tone.wav发给comfyUI"
-            # This implies we tell ComfyUI to use "tone.wav" (which might be the last uploaded one?)
-            # OR we find a local default tone.wav and upload it.
-            # Let's assume we send "tone.wav" string to the node, assuming it exists on server.
-            # OR better, if we have a default one in UPLOAD_FOLDER?
-            # Let's try to use "tone.wav" as the filename.
-            print("No file uploaded, using default tone.wav")
-            uploaded_filename = "tone.wav" 
-            # Note: If tone.wav doesn't exist on ComfyUI server input folder, this will fail.
-            # But the user request implies it should work (maybe persistence).
+            # No file provided, fallback to OBS tone.wav
+            # Download tone.wav from OBS
+            obs_tone_url = "http://obs.dimond.top/tone.wav"
+            print(f"No file uploaded, downloading from OBS: {obs_tone_url}")
+            
+            try:
+                wav_filename = f"tone_{uuid.uuid4()}.wav"
+                wav_path = os.path.join(UPLOAD_FOLDER, wav_filename)
+                
+                # Download
+                response = requests.get(obs_tone_url, stream=True)
+                if response.status_code == 200:
+                    with open(wav_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                else:
+                    return jsonify({'error': f'Failed to download tone.wav from OBS: {response.status_code}'}), 500
+                    
+                # Upload to ComfyUI
+                comfy_res = comfy_utils.client.upload_file(wav_path)
+                if not comfy_res:
+                    return jsonify({'error': 'Failed to upload downloaded tone.wav to ComfyUI'}), 500
+                uploaded_filename = comfy_res.get('name')
+                
+                # Clean up local file
+                if os.path.exists(wav_path):
+                    os.remove(wav_path)
+                    
+            except Exception as e:
+                return jsonify({'error': f'Error handling OBS fallback: {str(e)}'}), 500
 
         # Load Workflow
         workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', 'audio_workflow.json')
