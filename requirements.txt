@@ -3,5 +3,6 @@ requests
 moviepy<2.0
 pytest
 websocket-client
+pydub
 opencv-python-headless
 Pillow

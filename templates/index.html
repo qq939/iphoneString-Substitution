@@ -41,7 +41,7 @@
             <div class="grid-content">
                 <h2>角色配置</h2>
                 <form id="charUploadForm" action="/upload_character" method="post" enctype="multipart/form-data">
-                    <input type="file" name="image" accept="image/png, image/jpeg, image/webp" 
+                    <input type="file" name="file" accept="image/png, image/jpeg, image/webp" 
                            class="upload-input">
                     <button type="submit" id="charUploadBtn" class="action-btn">UPLOAD CHARACTER</button>
                 </form>
@@ -79,19 +79,24 @@
             </div>
         </div>
 
-        <!-- 格子 5 -->
+        <!-- 格子 5: 视频换人 (原 Grid 6) -->
         <div class="grid-item item-5">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <span class="placeholder">SECTOR 05</span>
+                <h2>视频换人 <span id="comfyStatusDot" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
+                <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" id="uploadBtn" class="action-btn">EXECUTE</button>
+                </form>
+                <div id="uploadStatus" style="margin-top: 10px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;"></div>
             </div>
         </div>
 
-        <!-- 格子 7: 最新视频预览 (原 Grid 7) -->
-        <div class="grid-item item-7">
+        <!-- 格子 6: 最新视频预览 (原 Grid 7) -->
+        <div class="grid-item item-6">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
@@ -108,24 +113,44 @@
             </div>
         </div>
 
-        <!-- 格子 6: 视频切片换人 (原 Grid 2) -->
-        <div class="grid-item item-6">
+        <!-- 格子 7: 音频上传 (新增) -->
+        <div class="grid-item item-7">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>视频切片换人 <span id="comfyStatusDot" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
-                <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
-                    <input type="file" name="video" accept="video/*" class="upload-input">
-                    <button type="submit" id="uploadBtn" class="action-btn">EXECUTE</button>
+                <h2>音频生成 <span id="comfyStatusDotAudio" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
+                <form id="audioUploadForm" action="/upload_audio" method="post" enctype="multipart/form-data">
+                    <div style="margin-bottom: 5px;">
+                        <input type="text" name="text" placeholder="输入生成的文本" class="upload-input" style="width: 100%; box-sizing: border-box; margin-bottom: 5px;" required>
+                    </div>
+                    <input type="file" name="file" accept="audio/*" class="upload-input" required>
+                    <button type="submit" id="audioUploadBtn" class="action-btn">GENERATE AUDIO</button>
                 </form>
-                <div id="uploadStatus" style="margin-top: 10px; font-size: 0.8em; white-space: pre-wrap; word-break: break-all;"></div>
+                <div id="audioStatus" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+            </div>
+        </div>
+
+        <!-- 格子 10: 最新音频展示 (新增) -->
+        <div class="grid-item item-10">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <h2>LATEST AUDIO</h2>
+                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <audio id="latestAudioPreview" controls style="width: 90%;">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div id="latestAudioName" style="margin-top: 10px; font-size: 0.7em; word-break: break-all;"></div>
+                </div>
             </div>
         </div>
 
         <!-- 其他格子占位 -->
-        {% for i in range(7, 17) %}
+        {% for i in range(11, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
@@ -154,18 +179,29 @@
                 .then(response => response.json())
                 .then(data => {
                     const dot = document.getElementById('comfyStatusDot');
+                    const dotAudio = document.getElementById('comfyStatusDotAudio');
                     if (data.connected) {
                         dot.style.backgroundColor = '#00ff00'; // Green
                         dot.style.boxShadow = '0 0 5px #00ff00';
+                        if (dotAudio) {
+                            dotAudio.style.backgroundColor = '#00ff00';
+                            dotAudio.style.boxShadow = '0 0 5px #00ff00';
+                        }
                     } else {
                         dot.style.backgroundColor = '#ff0000'; // Red
                         dot.style.boxShadow = '0 0 5px #ff0000';
+                        if (dotAudio) {
+                            dotAudio.style.backgroundColor = '#ff0000';
+                            dotAudio.style.boxShadow = '0 0 5px #ff0000';
+                        }
                     }
                 })
                 .catch(err => {
                     console.error('Status check failed:', err);
                     const dot = document.getElementById('comfyStatusDot');
+                    const dotAudio = document.getElementById('comfyStatusDotAudio');
                     dot.style.backgroundColor = 'gray';
+                    if (dotAudio) dotAudio.style.backgroundColor = 'gray';
                 });
         }
         
@@ -304,6 +340,84 @@
         // Check for latest video every 30 seconds
         updateLatestVideo();
         setInterval(updateLatestVideo, 30000);
+
+        // Audio Upload Handler
+        document.getElementById('audioUploadForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('audioStatus');
+            const btn = document.getElementById('audioUploadBtn');
+            
+            statusDiv.innerText = 'INITIALIZING AUDIO GENERATION...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/upload_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerText = 'SUBMITTED. PROCESSING...';
+                    
+                    // Poll for status
+                    const promptId = result.prompt_id;
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const statusRes = await fetch(`/check_audio_status/${promptId}`);
+                            const statusData = await statusRes.json();
+                            
+                            if (statusData.status === 'completed') {
+                                clearInterval(pollInterval);
+                                statusDiv.innerText = 'AUDIO GENERATED SUCCESSFULLY.';
+                                btn.disabled = false;
+                                // Update preview
+                                updateLatestAudio();
+                            } else if (statusData.status === 'failed') {
+                                clearInterval(pollInterval);
+                                statusDiv.innerText = 'FAILED: ' + (statusData.error || 'Unknown');
+                                btn.disabled = false;
+                            } else {
+                                statusDiv.innerText = `PROCESSING... [${statusData.status}]`;
+                            }
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }, 2000);
+                    
+                } else {
+                    statusDiv.innerText = 'ERROR: ' + (result.error || 'Unknown');
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                statusDiv.innerText = 'SYSTEM FAILURE: ' + err.message;
+                btn.disabled = false;
+            }
+        };
+
+        // Fetch latest audio for Grid 10
+        function updateLatestAudio() {
+            fetch('/latest_audio')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.url) {
+                        const audio = document.getElementById('latestAudioPreview');
+                        const nameDiv = document.getElementById('latestAudioName');
+                        // Only update if source changed
+                        if (!audio.src.includes(data.url)) {
+                            audio.src = data.url;
+                            nameDiv.innerText = data.filename || 'sound.flac';
+                        }
+                    }
+                })
+                .catch(err => console.error('Error fetching latest audio:', err));
+        }
+
+        // Check for latest audio every 30 seconds
+        updateLatestAudio();
+        setInterval(updateLatestAudio, 30000);
+
     </script>
 </body>
 </html>

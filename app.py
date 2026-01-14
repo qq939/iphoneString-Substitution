@@ -14,6 +14,11 @@ from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip,
 import comfy_utils
 import obs_utils
 
+try:
+    from pydub import AudioSegment
+except ImportError:
+    AudioSegment = None
+
 app = Flask(__name__)
 SUBSTITUTION_FILE = 'langchain/substitution.txt'
 
@@ -93,6 +98,25 @@ def remove_substitution(char):
     with open(SUBSTITUTION_FILE, 'w', encoding='utf-8') as f:
         f.write(new_content)
 
+def modify_audio_workflow(workflow, text, filename):
+    """
+    Modifies the audio workflow JSON based on inputs.
+    """
+    # 1. Update Text (Node 27)
+    if "27" in workflow and "inputs" in workflow["27"]:
+        workflow["27"]["inputs"]["text"] = text
+
+    # 2. Update Audio File (Node 29)
+    if "29" in workflow and "inputs" in workflow["29"]:
+        workflow["29"]["inputs"]["audio"] = filename
+        
+    # 3. Randomize seed (Node 27)
+    import random
+    if "27" in workflow and "inputs" in workflow["27"]:
+        workflow["27"]["inputs"]["seed"] = random.randint(1, 1000000000000000)
+        
+    return workflow
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -161,10 +185,10 @@ def comfy_status():
 
 @app.route('/upload_character', methods=['POST'])
 def upload_character():
-    if 'image' not in request.files:
+    if 'file' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
     
-    file = request.files['image']
+    file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
         
@@ -199,6 +223,150 @@ def upload_character():
             return jsonify({'error': 'Failed to upload to OBS'}), 500
             
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/upload_audio', methods=['POST'])
+def upload_audio():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No audio file provided'}), 400
+    
+    file = request.files['file']
+    text = request.form.get('text', '')
+    
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    if not text:
+        return jsonify({'error': 'No text provided'}), 400
+
+    try:
+        # Save uploaded file
+        original_filename = file.filename
+        ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+        temp_path = os.path.join(UPLOAD_FOLDER, f"temp_audio_{uuid.uuid4()}.{ext}")
+        file.save(temp_path)
+        
+        # Convert to wav (tone.wav)
+        # We use a unique name for ComfyUI to avoid conflicts if multiple users
+        # But ComfyUI usually handles files in input folder. 
+        # To keep it simple, we'll use a UUID name
+        wav_filename = f"tone_{uuid.uuid4()}.wav"
+        wav_path = os.path.join(UPLOAD_FOLDER, wav_filename)
+        
+        if AudioSegment:
+            try:
+                audio = AudioSegment.from_file(temp_path)
+                audio.export(wav_path, format="wav")
+            except Exception as e:
+                print(f"Audio conversion failed: {e}, copying instead")
+                shutil.copy(temp_path, wav_path)
+        else:
+            shutil.copy(temp_path, wav_path)
+            
+        # Upload to ComfyUI
+        comfy_res = comfy_utils.client.upload_file(wav_path)
+        if not comfy_res:
+            return jsonify({'error': 'Failed to upload to ComfyUI'}), 500
+        
+        uploaded_filename = comfy_res.get('name')
+        
+        # Load Workflow
+        workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', 'audio_workflow.json')
+        if not os.path.exists(workflow_path):
+             return jsonify({"error": "Workflow file not found"}), 500
+             
+        with open(workflow_path, 'r', encoding='utf-8') as f:
+            workflow = json.load(f)
+            
+        workflow = modify_audio_workflow(workflow, text, uploaded_filename)
+        
+        # Queue Prompt
+        prompt_id = comfy_utils.client.queue_prompt(workflow)
+        
+        if prompt_id:
+            # Clean up temp files
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            if os.path.exists(wav_path):
+                os.remove(wav_path)
+                
+            return jsonify({"status": "success", "prompt_id": prompt_id})
+        else:
+            return jsonify({"error": "Failed to queue prompt"}), 500
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/check_audio_status/<prompt_id>', methods=['GET'])
+def check_audio_status(prompt_id):
+    try:
+        status, result = comfy_utils.check_status(prompt_id)
+        
+        if status == 'SUCCEEDED':
+            # Download result
+            if isinstance(result, dict):
+                local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+                if local_path:
+                    # Upload to OBS
+                    # Naming: YYYYMMDDHHMMSSsound.flac
+                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Ssound.flac")
+                    obs_url = obs_utils.upload_file(local_path, output_filename, mime_type='audio/flac')
+                    
+                    # Rename local file to match so latest_audio can find it
+                    local_renamed_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                    if os.path.exists(local_path):
+                        os.rename(local_path, local_renamed_path)
+                    
+                    if obs_url:
+                        return jsonify({'status': 'completed', 'url': obs_url})
+                    else:
+                        return jsonify({'status': 'failed', 'error': 'Failed to upload to OBS'})
+                else:
+                    return jsonify({'status': 'failed', 'error': 'Failed to download result'})
+            else:
+                return jsonify({'status': 'failed', 'error': 'Invalid result format'})
+        elif status == 'FAILED':
+             return jsonify({'status': 'failed', 'error': str(result)})
+        else:
+             return jsonify({'status': status})
+             
+    except Exception as e:
+        return jsonify({'status': 'failed', 'error': str(e)})
+
+@app.route('/latest_audio', methods=['GET'])
+def get_latest_audio():
+    """
+    Returns the URL of the latest generated audio from OBS based on naming convention.
+    Naming convention: YYYYMMDDHHMMSSsound.flac
+    """
+    try:
+        # We need to list files from OBS or local?
+        # Since we upload to OBS and don't keep a local DB, we can check local UPLOAD_FOLDER for files we downloaded/processed
+        # But wait, download_result saves to UPLOAD_FOLDER with ComfyUI's filename (e.g. ComfyUI_0001.flac or similar)
+        # It doesn't rename to YYYYMMDDHHMMSSsound.flac locally unless we do it.
+        # In check_audio_status, we upload to OBS with that name, but local file is whatever download_result returned.
+        # We should probably check OBS listing? But obs_utils might not support listing.
+        # Let's rely on the fact that we process it on this server.
+        # We can rename the local file to match the OBS name after uploading, or keep a record.
+        # Let's verify what check_audio_status does.
+        # It uploads `local_path` to OBS as `output_filename`.
+        # We should rename `local_path` to `output_filename` locally too so we can find it.
+        
+        # Refactor check_audio_status slightly to rename local file?
+        # Or just search for *sound.flac in UPLOAD_FOLDER if we save it there.
+        # Wait, check_audio_status doesn't save with new name locally.
+        # I'll update check_audio_status to rename local file.
+        
+        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('sound.flac')]
+        if not files:
+            return jsonify({'url': None})
+            
+        files.sort(reverse=True)
+        latest_file = files[0]
+        obs_url = f"http://obs.dimond.top/{latest_file}"
+        
+        return jsonify({'url': obs_url, 'filename': latest_file})
+    except Exception as e:
+        print(f"Error fetching latest audio: {e}")
         return jsonify({'error': str(e)}), 500
 
 def monitor_group_task(group_id):

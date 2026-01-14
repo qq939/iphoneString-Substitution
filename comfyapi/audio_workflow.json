@@ -1,0 +1,76 @@
+{
+  "26": {
+    "inputs": {
+      "model": "IndexTTS-2",
+      "download_from": "modelscope"
+    },
+    "class_type": "easy downloadIndexTTSAndLoadModel",
+    "_meta": {
+      "title": "IndexTTS 模型加载器"
+    }
+  },
+  "27": {
+    "inputs": {
+      "text": "你是来拉屎的吧！",
+      "unload_model": false,
+      "seed": 4242950409,
+      "indextts_model": [
+        "26",
+        0
+      ],
+      "emotions": [
+        "47",
+        0
+      ]
+    },
+    "class_type": "easy indexTTSGenerateSimple",
+    "_meta": {
+      "title": "IndexTTS 简单生成"
+    }
+  },
+  "29": {
+    "inputs": {
+      "audio": "tone.wav",
+      "audioUI": ""
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频"
+    }
+  },
+  "45": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "audio": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "SaveAudio",
+    "_meta": {
+      "title": "保存音频"
+    }
+  },
+  "47": {
+    "inputs": {
+      "voice_name": "",
+      "use_random": false,
+      "Happy": 0,
+      "Angry": 0,
+      "Sad": 0,
+      "Fear": 0,
+      "Hate": 0,
+      "Low": 0,
+      "Surprise": 0,
+      "Neutral": 0,
+      "reference_audio": [
+        "29",
+        0
+      ]
+    },
+    "class_type": "easy indexTTSEmotionVector",
+    "_meta": {
+      "title": "音色情感向量"
+    }
+  }
+}
