@@ -369,8 +369,8 @@ def check_audio_status(prompt_id):
                 local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
                 if local_path:
                     # Upload to OBS
-                    # Naming: YYYYMMDDHHMMSSsound.flac
-                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Ssound.flac")
+                    # Naming: YYYYMMDDHHMMSSaudio.flac
+                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Saudio.flac")
                     obs_url = obs_utils.upload_file(local_path, output_filename, mime_type='audio/flac')
                     
                     # Rename local file to match so latest_audio can find it
@@ -398,13 +398,13 @@ def check_audio_status(prompt_id):
 def get_latest_audio():
     """
     Returns the URL of the latest generated audio from OBS based on naming convention.
-    Naming convention: YYYYMMDDHHMMSSsound.flac
+    Naming convention: YYYYMMDDHHMMSSaudio.flac
     """
     try:
         # We need to list files from OBS or local?
         # Since we upload to OBS and don't keep a local DB, we can check local UPLOAD_FOLDER for files we downloaded/processed
         # But wait, download_result saves to UPLOAD_FOLDER with ComfyUI's filename (e.g. ComfyUI_0001.flac or similar)
-        # It doesn't rename to YYYYMMDDHHMMSSsound.flac locally unless we do it.
+        # It doesn't rename to YYYYMMDDHHMMSSaudio.flac locally unless we do it.
         # In check_audio_status, we upload to OBS with that name, but local file is whatever download_result returned.
         # We should probably check OBS listing? But obs_utils might not support listing.
         # Let's rely on the fact that we process it on this server.
@@ -414,11 +414,11 @@ def get_latest_audio():
         # We should rename `local_path` to `output_filename` locally too so we can find it.
         
         # Refactor check_audio_status slightly to rename local file?
-        # Or just search for *sound.flac in UPLOAD_FOLDER if we save it there.
+        # Or just search for *audio.flac in UPLOAD_FOLDER if we save it there.
         # Wait, check_audio_status doesn't save with new name locally.
         # I'll update check_audio_status to rename local file.
         
-        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('sound.flac')]
+        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('audio.flac')]
         if not files:
             return jsonify({'url': None})
             
