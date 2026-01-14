@@ -509,5 +509,33 @@ def check_group_status(group_id):
     }
     return jsonify(response)
 
+@app.route('/latest_video', methods=['GET'])
+def get_latest_video():
+    """
+    Returns the URL of the latest generated video from OBS based on naming convention.
+    Naming convention: YYYYMMDDHHMMSSall.mp4
+    """
+    try:
+        # Since we don't have a database of OBS files, we can either:
+        # 1. List files in local UPLOAD_FOLDER and find the latest 'all.mp4'
+        # 2. Assume the filename format allows sorting
+        
+        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('all.mp4')]
+        if not files:
+            return jsonify({'url': None})
+            
+        # Sort by filename (which starts with timestamp) descending
+        files.sort(reverse=True)
+        latest_file = files[0]
+        
+        # Construct OBS URL
+        # Assuming obs_utils.upload_file returns a consistent URL format: http://obs.dimond.top/{filename}
+        obs_url = f"http://obs.dimond.top/{latest_file}"
+        
+        return jsonify({'url': obs_url})
+    except Exception as e:
+        print(f"Error fetching latest video: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5015)

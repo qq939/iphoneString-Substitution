@@ -90,6 +90,24 @@
             </div>
         </div>
 
+        <!-- 格子 7: 最新视频预览 (原 Grid 7) -->
+        <div class="grid-item item-7">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+                <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
+            </div>
+            <div class="grid-content">
+                <a href="http://obs.dimond.top" target="_blank" style="display: block; width: 100%; height: 100%; text-decoration: none; position: relative;">
+                    <video id="latestVideoPreview" autoplay muted loop style="width: 100%; height: 100%; object-fit: cover; border: 1px solid #00ff00;">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div style="position: absolute; bottom: 5px; left: 5px; background: rgba(0,0,0,0.7); color: #00ff00; font-size: 0.7em; padding: 2px 5px;">
+                        LATEST OUTPUT
+                    </div>
+                </a>
+            </div>
+        </div>
+
         <!-- 格子 6: 视频切片换人 (原 Grid 2) -->
         <div class="grid-item item-6">
             <div class="grid-controls">
@@ -266,6 +284,26 @@
                  btn.disabled = false;
              }
          };
+
+        // Fetch latest video for Grid 7
+        function updateLatestVideo() {
+            fetch('/latest_video')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.url) {
+                        const video = document.getElementById('latestVideoPreview');
+                        // Only update if source changed to avoid flickering
+                        if (!video.src.includes(data.url)) {
+                            video.src = data.url;
+                        }
+                    }
+                })
+                .catch(err => console.error('Error fetching latest video:', err));
+        }
+        
+        // Check for latest video every 30 seconds
+        updateLatestVideo();
+        setInterval(updateLatestVideo, 30000);
     </script>
 </body>
 </html>
