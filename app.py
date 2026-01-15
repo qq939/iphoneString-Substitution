@@ -208,45 +208,7 @@ def modify_audio_workflow(workflow, text, filename, emotions=None):
         
     return workflow
 
-import xml.etree.ElementTree as ET
 
-def get_latest_file_from_obs(suffix):
-    """
-    Parses OBS bucket listing to find the latest file with given suffix.
-    """
-    try:
-        # Fetch bucket listing (assuming standard S3/OBS XML response)
-        # We need to list objects. Assuming http://obs.dimond.top/ lists contents.
-        # This might not work if listing is disabled or format is different.
-        # But based on typical public bucket behavior:
-        response = requests.get("http://obs.dimond.top/", timeout=5)
-        if response.status_code != 200:
-            return None
-            
-        # Parse XML
-        root = ET.fromstring(response.content)
-        # Namespace usually: {http://s3.amazonaws.com/doc/2006-03-01/}
-        # We'll just search for 'Key' tags
-        
-        files = []
-        # Find all keys
-        # This is a rough XML search
-        for content in root.findall('.//{http://s3.amazonaws.com/doc/2006-03-01/}Key'):
-             files.append(content.text)
-        
-        # If namespace doesn't match, try without or check root.tag
-        if not files:
-             for content in root.findall('.//Key'):
-                 files.append(content.text)
-                 
-        # Filter by suffix
-        target_files = [f for f in files if f.endswith(suffix)]
-        target_files.sort(reverse=True) # Assuming timestamp naming YYYYMMDD...
-        
-        return target_files[0] if target_files else None
-    except Exception as e:
-        # print(f"Error listing OBS files: {e}")
-        return None
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -332,6 +294,10 @@ def retest_connection():
 
 @app.route('/upload_character', methods=['POST'])
 def upload_character():
+    # 1. Connection Check
+    if not ensure_comfy_connection():
+        return jsonify({'error': 'ComfyUI connection failed. Please check server status.'}), 503
+
     if 'file' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
     
