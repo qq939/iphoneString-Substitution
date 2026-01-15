@@ -292,11 +292,32 @@ def retest_connection():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+def ensure_comfy_connection():
+    """
+    Checks connection to ComfyUI and updates global status.
+    Raises exception if no server is available.
+    """
+    # Force a check which will try to switch servers if current is down
+    if not comfy_utils.client.check_connection():
+        # If check_connection returns False, it means even after retries it failed
+        COMFY_STATUS['status'] = 'offline'
+        COMFY_STATUS['ip'] = "None"
+        raise Exception("Could not connect to any ComfyUI server")
+    
+    # If we are here, we are connected
+    COMFY_STATUS['status'] = 'online'
+    COMFY_STATUS['ip'] = comfy_utils.client.base_url
+    COMFY_STATUS['last_checked'] = time.time()
+
 @app.route('/upload_character', methods=['POST'])
 def upload_character():
-    # 1. Connection Check
-    if not ensure_comfy_connection():
-        return jsonify({'error': 'ComfyUI connection failed. Please check server status.'}), 503
+    # 1. Connection Check (Optional for character upload)
+    # User noted this is just OBS upload, so we shouldn't block if ComfyUI is down.
+    # We'll just update status in background or log it.
+    try:
+        ensure_comfy_connection()
+    except:
+        pass
 
     if 'file' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
@@ -340,6 +361,12 @@ def upload_character():
 
 @app.route('/upload_audio', methods=['POST'])
 def upload_audio():
+    # Ensure ComfyUI connection before starting
+    try:
+        ensure_comfy_connection()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
     # Support multiple formats
     allowed_extensions = {'mov', 'mp4', 'mp3', 'wav', 'flac'}
     
@@ -1016,6 +1043,12 @@ def monitor_group_task(group_id):
 
 @app.route('/upload_image_swap', methods=['POST'])
 def upload_image_swap():
+    # Ensure ComfyUI connection before starting
+    try:
+        ensure_comfy_connection()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
     if 'file' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
     
@@ -1179,6 +1212,12 @@ def get_latest_image():
 
 @app.route('/upload_and_cut', methods=['POST'])
 def upload_and_cut():
+    # Ensure ComfyUI connection before starting
+    try:
+        ensure_comfy_connection()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
     if 'video' not in request.files:
         return jsonify({'error': 'No video file provided'}), 400
     
