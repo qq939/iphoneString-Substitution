@@ -15,11 +15,13 @@ logger = logging.getLogger(__name__)
 
 class ComfyUIClient:
     def __init__(self, server_address="dimond.top:7860"):
-        if server_address.startswith("http://") or server_address.startswith("https://"):
-            self.base_url = server_address.rstrip("/")
-        else:
-            self.base_url = f"http://{server_address.rstrip('/')}"
+        # Force HTTP as requested, removing HTTPS if present
+        if server_address.startswith("https://"):
+            server_address = server_address.replace("https://", "http://")
+        elif not server_address.startswith("http://"):
+            server_address = f"http://{server_address}"
             
+        self.base_url = server_address.rstrip("/")
         self.server_address = self.base_url.replace("http://", "").replace("https://", "")
         logger.info(f"ComfyUIClient initialized with server: {self.base_url}")
 
@@ -29,9 +31,12 @@ class ComfyUIClient:
         """
         try:
             url = f"{self.base_url}/object_info"
-            response = requests.get(url, timeout=timeout)
+            # Add headers to mimic browser/standard client
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, timeout=timeout, headers=headers)
             return response.status_code == 200
-        except:
+        except Exception as e:
+            # logger.debug(f"Connection check failed: {e}") # Reduce noise
             return False
 
     def ensure_connection(self):

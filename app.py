@@ -386,7 +386,8 @@ def upload_audio():
                 wav_path = os.path.join(UPLOAD_FOLDER, wav_filename)
                 
                 # Download
-                response = requests.get(obs_tone_url, stream=True)
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                response = requests.get(obs_tone_url, stream=True, timeout=30, headers=headers)
                 if response.status_code == 200:
                     with open(wav_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
@@ -520,7 +521,9 @@ def process_digital_human_video(audio_path, input_video_path=None):
             
             print(f"Downloading character from {character_url}...")
             try:
-                response = requests.get(character_url, stream=True, timeout=30)
+                # Added timeout and headers
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                response = requests.get(character_url, stream=True, timeout=30, headers=headers)
                 if response.status_code == 200:
                     with open(character_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
