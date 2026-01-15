@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import random
+import math
 
 # Add parent directory to path to import app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,9 +18,10 @@ def test_modify_workflow():
     # 2. Define inputs
     image_filename = "test_character.png"
     audio_filename = "test_audio.wav"
+    audio_duration = 5.0 # seconds
     
     # 3. Modify
-    modified_workflow = modify_digital_human_workflow(workflow, image_filename, audio_filename)
+    modified_workflow = modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration)
     
     # 4. Assertions
     # Check Image Node (49)
@@ -33,6 +35,17 @@ def test_modify_workflow():
     new_seed = modified_workflow["64"]["inputs"]["seed"]
     assert new_seed == 0, "Seed should be 0"
     
+    # Check Frame Length Calculation
+    # Default FPS is usually 25 in code if not found in workflow, but let's see.
+    # In modify_digital_human_workflow, we set fps=25 default.
+    # But wait, does Node 60 exist in the json?
+    # Let's check if "60" is in workflow.json. Yes it is.
+    fps = workflow["60"]["inputs"]["fps"]
+    expected_length = int(math.ceil(audio_duration * fps))
+    
+    new_length = modified_workflow["65"]["inputs"]["length"]
+    assert new_length == expected_length, f"Expected length {expected_length}, got {new_length}"
+    
     print("Workflow modification test passed!")
 
 def test_audio_slicing_logic():
@@ -40,12 +53,12 @@ def test_audio_slicing_logic():
     # We can mock AudioFileClip or just verify the math
     
     total_duration = 25 # seconds
-    segment_duration = 10
+    segment_duration = 5 # Updated to 5s
     
     import math
     num_segments = math.ceil(total_duration / segment_duration)
     
-    assert num_segments == 3, f"Expected 3 segments, got {num_segments}"
+    assert num_segments == 5, f"Expected 5 segments, got {num_segments}"
     
     # Verify time ranges
     segments = []
@@ -54,9 +67,11 @@ def test_audio_slicing_logic():
         end_time = min((i + 1) * segment_duration, total_duration)
         segments.append((start_time, end_time))
         
-    assert segments[0] == (0, 10)
-    assert segments[1] == (10, 20)
-    assert segments[2] == (20, 25)
+    assert segments[0] == (0, 5)
+    assert segments[1] == (5, 10)
+    assert segments[2] == (10, 15)
+    assert segments[3] == (15, 20)
+    assert segments[4] == (20, 25)
     
     print("Audio slicing logic test passed!")
 

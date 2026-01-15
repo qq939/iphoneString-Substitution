@@ -82,9 +82,10 @@ TASKS_STORE = {}
 # { prompt_id: {'status': 'pending'|'processing_result'|'completed', 'url': '...'} }
 AUDIO_TASKS = {}
 
-def modify_digital_human_workflow(workflow, image_filename, audio_filename):
+def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
     """
     Modifies the digital human video workflow JSON based on inputs.
+    audio_duration: duration of the audio segment in seconds (optional, for frame calculation)
     """
     # 1. Update Image (Node 49)
     if "49" in workflow and "inputs" in workflow["49"]:
@@ -97,6 +98,24 @@ def modify_digital_human_workflow(workflow, image_filename, audio_filename):
     # 3. Randomize Seed (Node 64) -> Set to 0 as requested
     if "64" in workflow and "inputs" in workflow["64"]:
         workflow["64"]["inputs"]["seed"] = 0
+        
+    # 4. Update Frame Length (Node 65) based on audio duration and FPS (Node 60)
+    if audio_duration is not None and "65" in workflow and "inputs" in workflow["65"]:
+        fps = 25 # Default FPS
+        if "60" in workflow and "inputs" in workflow["60"] and "fps" in workflow["60"]["inputs"]:
+            fps = workflow["60"]["inputs"]["fps"]
+            
+        # Calculate frames: duration * fps
+        # Add a small buffer or ceil? Wan2.1 usually needs specific lengths?
+        # The prompt implies we should calculate it.
+        # length = int(audio_duration * fps) + some_buffer?
+        # Let's match audio length exactly or slightly more.
+        length = int(math.ceil(audio_duration * fps))
+        
+        # Ensure minimum length if needed? 
+        # Node 65 input "length"
+        workflow["65"]["inputs"]["length"] = length
+        print(f"Updated workflow frame length to {length} (Duration: {audio_duration}s, FPS: {fps})")
         
     return workflow
 
@@ -449,10 +468,10 @@ def process_digital_human_video(audio_path):
         try:
             audio_clip = AudioFileClip(audio_path)
             duration = audio_clip.duration
-            segment_duration = 10 # 10 seconds per segment
+            segment_duration = 5 # 5 seconds per segment (Updated from 10s)
             num_segments = math.ceil(duration / segment_duration)
             
-            print(f"Audio duration: {duration}s, Slicing into {num_segments} segments...")
+            print(f"Audio duration: {duration}s, Slicing into {num_segments} segments (5s each)...")
             
             tasks = [] # List to store prompt_ids and segment info
             
@@ -468,6 +487,7 @@ def process_digital_human_video(audio_path):
             for i in range(num_segments):
                 start_time = i * segment_duration
                 end_time = min((i + 1) * segment_duration, duration)
+                current_segment_duration = end_time - start_time
                 
                 # Create Audio Segment
                 sub_audio = audio_clip.subclip(start_time, end_time)
@@ -490,7 +510,14 @@ def process_digital_human_video(audio_path):
                 # Deep copy to avoid modifying template for other iterations
                 import copy
                 current_workflow = copy.deepcopy(workflow_template)
-                current_workflow = modify_digital_human_workflow(current_workflow, uploaded_image_name, uploaded_audio_seg_name)
+                
+                # Update workflow with dynamic frame length
+                current_workflow = modify_digital_human_workflow(
+                    current_workflow, 
+                    uploaded_image_name, 
+                    uploaded_audio_seg_name,
+                    audio_duration=current_segment_duration
+                )
                 
                 # Submit Task
                 print(f"Submitting digital human task for segment {i}...")
