@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Server list for dual-try mechanism
 SERVER_LIST = [
+    "192.168.0.209:7860",
     "192.168.0.210:7860",
     "192.168.50.210:7860"
 ]
