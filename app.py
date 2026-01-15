@@ -582,6 +582,11 @@ def process_digital_human_video(audio_path, input_video_path=None):
         uploaded_video_name = None
         character_path = None
         video_1s_path = None
+
+        # DEBUG: Check if input_video_path is passed correctly
+        print(f"DEBUG: process_digital_human_video called with input_video_path: {input_video_path}")
+        if input_video_path:
+             print(f"DEBUG: input_video_path exists: {os.path.exists(input_video_path)}")
         
         if input_video_path and os.path.exists(input_video_path):
             print(f"Using provided input video: {input_video_path}")
@@ -707,7 +712,7 @@ def process_digital_human_video(audio_path, input_video_path=None):
                 elif status == 'FAILED':
                     print(f"Task failed: {result}")
                     break
-                    
+                    2
             except Exception as e:
                 print(f"Error checking task: {e}")
                 # Retry
