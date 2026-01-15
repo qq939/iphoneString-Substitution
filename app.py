@@ -81,6 +81,7 @@ TASKS_STORE = {}
 # Store audio task state to prevent duplicate stage 2 processing
 # { prompt_id: {'status': 'pending'|'processing_result'|'completed', 'url': '...'} }
 AUDIO_TASKS = {}
+AUDIO_LOCK = threading.Lock()
 
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
     """
@@ -670,22 +671,28 @@ def process_digital_human_video(audio_path):
 @app.route('/check_audio_status/<prompt_id>', methods=['GET'])
 def check_audio_status(prompt_id):
     # Check if we already processed this task
-    task_data = AUDIO_TASKS.get(prompt_id)
-    if task_data:
-        if task_data['status'] == 'completed' and task_data['url']:
-            return jsonify({'status': 'completed', 'url': task_data['url']})
-        if task_data['status'] == 'processing_result':
-            return jsonify({'status': 'processing'}) # Still working on result
+    with AUDIO_LOCK:
+        task_data = AUDIO_TASKS.get(prompt_id)
+        if task_data:
+            if task_data['status'] == 'completed' and task_data['url']:
+                return jsonify({'status': 'completed', 'url': task_data['url']})
+            if task_data['status'] == 'processing_result':
+                return jsonify({'status': 'processing'}) # Still working on result
 
     try:
         status, result = comfy_utils.check_status(prompt_id)
         
         if status == 'SUCCEEDED':
             # Mark as processing to prevent re-entry
-            if prompt_id in AUDIO_TASKS:
-                AUDIO_TASKS[prompt_id]['status'] = 'processing_result'
-            else:
-                AUDIO_TASKS[prompt_id] = {'status': 'processing_result', 'url': None}
+            with AUDIO_LOCK:
+                # Double check inside lock
+                if prompt_id in AUDIO_TASKS and AUDIO_TASKS[prompt_id]['status'] in ['processing_result', 'completed']:
+                     return jsonify({'status': 'processing'})
+                     
+                if prompt_id in AUDIO_TASKS:
+                    AUDIO_TASKS[prompt_id]['status'] = 'processing_result'
+                else:
+                    AUDIO_TASKS[prompt_id] = {'status': 'processing_result', 'url': None}
 
             # Download result
             if isinstance(result, dict):
@@ -703,8 +710,9 @@ def check_audio_status(prompt_id):
                     
                     if obs_url:
                         # Update task state
-                        AUDIO_TASKS[prompt_id]['status'] = 'completed'
-                        AUDIO_TASKS[prompt_id]['url'] = obs_url
+                        with AUDIO_LOCK:
+                            AUDIO_TASKS[prompt_id]['status'] = 'completed'
+                            AUDIO_TASKS[prompt_id]['url'] = obs_url
                         
                         # Trigger Digital Human Video Generation (Stage 2)
                         # We do this in a background thread to avoid blocking the response
@@ -715,17 +723,21 @@ def check_audio_status(prompt_id):
                         
                         return jsonify({'status': 'completed', 'url': obs_url})
                     else:
-                        AUDIO_TASKS[prompt_id]['status'] = 'failed'
+                        with AUDIO_LOCK:
+                            AUDIO_TASKS[prompt_id]['status'] = 'failed'
                         return jsonify({'status': 'failed', 'error': 'Failed to upload to OBS'})
                 else:
-                    AUDIO_TASKS[prompt_id]['status'] = 'failed'
+                    with AUDIO_LOCK:
+                        AUDIO_TASKS[prompt_id]['status'] = 'failed'
                     return jsonify({'status': 'failed', 'error': 'Failed to download result'})
             else:
-                AUDIO_TASKS[prompt_id]['status'] = 'failed'
+                with AUDIO_LOCK:
+                    AUDIO_TASKS[prompt_id]['status'] = 'failed'
                 return jsonify({'status': 'failed', 'error': 'Invalid result format'})
         elif status == 'FAILED':
-             if prompt_id in AUDIO_TASKS:
-                 AUDIO_TASKS[prompt_id]['status'] = 'failed'
+             with AUDIO_LOCK:
+                 if prompt_id in AUDIO_TASKS:
+                     AUDIO_TASKS[prompt_id]['status'] = 'failed'
              return jsonify({'status': 'failed', 'error': str(result)})
         else:
              return jsonify({'status': status})
