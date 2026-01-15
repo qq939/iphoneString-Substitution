@@ -16,28 +16,39 @@
             </div>
             <div class="grid-content">
                 <h2>字符替换</h2>
-                <form method="POST" action="/">
-                    <div class="input-group">
-                        <input type="text" name="text" placeholder=">_" autocomplete="off" autofocus>
-                        <button type="submit" name="action" value="add">+</button>
-                        <button type="submit" name="action" value="remove">-</button>
+                <div style="height: 40%;">
+                    <form method="POST" action="/">
+                        <div class="input-group">
+                            <input type="text" name="text" placeholder=">_" autocomplete="off" autofocus>
+                            <button type="submit" name="action" value="add">+</button>
+                            <button type="submit" name="action" value="remove">-</button>
+                        </div>
+                    </form>
+                </div>
+                <div style="height: 60%; border-top: 1px solid var(--border-color); overflow-y: auto; padding-top: 5px;">
+                     <div class="substitution-content" style="word-break: break-all;">
+                        {{ substitutions }}
                     </div>
-                </form>
+                </div>
             </div>
         </div>
         
-        <!-- 格子 2: BUFFER展示 (原 Sector 01 buffer) -->
+        <!-- 格子 2: 网络连通性 -->
         <div class="grid-item item-2">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>替换字符</h2>
-                <div class="output-area" style="height: 100%; display: flex; flex-direction: column;">
-                    <div class="substitution-content" style="flex-grow: 1; overflow-y: auto;">
-                        {{ substitutions }}
-                    </div>
+                <h2 style="display: flex; justify-content: space-between; align-items: center;">
+                    网络连通性
+                    <span id="connStatusLight" style="display: inline-block; width: 15px; height: 15px; border-radius: 50%; background-color: gray; box-shadow: 0 0 2px gray;"></span>
+                </h2>
+                <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                    <div style="font-size: 0.8rem; margin-bottom: 10px; color: #888;">CURRENT IP</div>
+                    <div id="currentIp" style="font-size: 1.1rem; color: #0f0; margin-bottom: 20px; font-weight: bold; word-break: break-all; text-align: center;">LOADING...</div>
+                    <button id="retestBtn" class="action-btn" onclick="retestConnection()" style="width: 80%;">RETEST CONNECTION</button>
+                    <div id="retestStatus" style="font-size: 0.7rem; margin-top: 5px; height: 1em;"></div>
                 </div>
             </div>
         </div>
@@ -86,7 +97,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>视频换人 <span id="comfyStatusDot" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
+                <h2>视频换人</h2>
                 <form id="uploadForm" action="/upload_and_cut" method="post" enctype="multipart/form-data">
                     <div style="margin-bottom: 5px;">
                         <label style="margin-right: 10px;"><input type="radio" name="workflow_type" value="real" checked> 真人</label>
@@ -122,7 +133,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>音频生成 <span id="comfyStatusDotAudio" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
+                <h2>音频生成</h2>
                 <form id="audioUploadForm" action="/upload_audio" method="post" enctype="multipart/form-data">
                     <div style="margin-bottom: 5px; display: flex; gap: 5px; align-items: center;">
                         <input type="text" name="text" placeholder="输入生成的文本" class="upload-input" style="flex-grow: 1; box-sizing: border-box; margin-bottom: 0;" required>
@@ -171,7 +182,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>图片换人 <span id="comfyStatusDotImg" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: gray; margin-left: 10px; box-shadow: 0 0 2px gray;"></span></h2>
+                <h2>图片换人</h2>
                 <form id="imgSwapForm" action="/upload_image_swap" method="post" enctype="multipart/form-data">
                     <div style="margin-bottom: 5px;">
                         <label style="margin-right: 10px;"><input type="radio" name="workflow_type" value="real" checked> 真人</label>
@@ -230,30 +241,53 @@
             fetch('/comfy_status')
                 .then(response => response.json())
                 .then(data => {
-                    const dot = document.getElementById('comfyStatusDot');
-                    const dotAudio = document.getElementById('comfyStatusDotAudio');
-                    if (data.connected) {
+                    const dot = document.getElementById('connStatusLight');
+                    const ipDiv = document.getElementById('currentIp');
+                    
+                    if (data.status === 'online') {
                         dot.style.backgroundColor = '#00ff00'; // Green
                         dot.style.boxShadow = '0 0 5px #00ff00';
-                        if (dotAudio) {
-                            dotAudio.style.backgroundColor = '#00ff00';
-                            dotAudio.style.boxShadow = '0 0 5px #00ff00';
-                        }
+                        ipDiv.innerText = data.ip || 'Unknown';
+                        ipDiv.style.color = '#00ff00';
                     } else {
                         dot.style.backgroundColor = '#ff0000'; // Red
                         dot.style.boxShadow = '0 0 5px #ff0000';
-                        if (dotAudio) {
-                            dotAudio.style.backgroundColor = '#ff0000';
-                            dotAudio.style.boxShadow = '0 0 5px #ff0000';
-                        }
+                        ipDiv.innerText = data.ip || 'DISCONNECTED';
+                        ipDiv.style.color = '#ff0000';
                     }
                 })
                 .catch(err => {
                     console.error('Status check failed:', err);
-                    const dot = document.getElementById('comfyStatusDot');
-                    const dotAudio = document.getElementById('comfyStatusDotAudio');
+                    const dot = document.getElementById('connStatusLight');
+                    const ipDiv = document.getElementById('currentIp');
                     dot.style.backgroundColor = 'gray';
-                    if (dotAudio) dotAudio.style.backgroundColor = 'gray';
+                    ipDiv.innerText = 'ERROR';
+                    ipDiv.style.color = 'gray';
+                });
+        }
+        
+        function retestConnection() {
+            const btn = document.getElementById('retestBtn');
+            const statusDiv = document.getElementById('retestStatus');
+            btn.disabled = true;
+            statusDiv.innerText = 'TESTING...';
+            
+            fetch('/retest_connection', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                         statusDiv.innerText = 'DONE';
+                         checkComfyStatus(); // Refresh UI
+                    } else {
+                        statusDiv.innerText = 'FAILED';
+                    }
+                })
+                .catch(e => {
+                    statusDiv.innerText = 'ERROR: ' + e.message;
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    setTimeout(() => { statusDiv.innerText = ''; }, 3000);
                 });
         }
         

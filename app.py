@@ -37,7 +37,8 @@ if not os.path.exists(UPLOAD_FOLDER):
 # ComfyUI Status
 COMFY_STATUS = {
     'status': 'unknown',
-    'last_checked': 0
+    'last_checked': 0,
+    'ip': 'Unknown'
 }
 
 def check_comfy_status():
@@ -51,13 +52,16 @@ def check_comfy_status():
                 if COMFY_STATUS['status'] != 'online':
                     print(f"ComfyUI is ONLINE at {comfy_utils.client.base_url}")
                 COMFY_STATUS['status'] = 'online'
+                COMFY_STATUS['ip'] = comfy_utils.client.base_url
             else:
                 if COMFY_STATUS['status'] != 'offline':
                     print(f"ComfyUI is OFFLINE at {comfy_utils.client.base_url}")
                 COMFY_STATUS['status'] = 'offline'
+                COMFY_STATUS['ip'] = comfy_utils.client.base_url if comfy_utils.client.base_url else "None"
         except Exception as e:
             print(f"Error checking ComfyUI status: {e}")
             COMFY_STATUS['status'] = 'offline'
+            COMFY_STATUS['ip'] = "Error"
         COMFY_STATUS['last_checked'] = time.time()
         time.sleep(30)
 
@@ -204,6 +208,46 @@ def modify_audio_workflow(workflow, text, filename, emotions=None):
         
     return workflow
 
+import xml.etree.ElementTree as ET
+
+def get_latest_file_from_obs(suffix):
+    """
+    Parses OBS bucket listing to find the latest file with given suffix.
+    """
+    try:
+        # Fetch bucket listing (assuming standard S3/OBS XML response)
+        # We need to list objects. Assuming http://obs.dimond.top/ lists contents.
+        # This might not work if listing is disabled or format is different.
+        # But based on typical public bucket behavior:
+        response = requests.get("http://obs.dimond.top/", timeout=5)
+        if response.status_code != 200:
+            return None
+            
+        # Parse XML
+        root = ET.fromstring(response.content)
+        # Namespace usually: {http://s3.amazonaws.com/doc/2006-03-01/}
+        # We'll just search for 'Key' tags
+        
+        files = []
+        # Find all keys
+        # This is a rough XML search
+        for content in root.findall('.//{http://s3.amazonaws.com/doc/2006-03-01/}Key'):
+             files.append(content.text)
+        
+        # If namespace doesn't match, try without or check root.tag
+        if not files:
+             for content in root.findall('.//Key'):
+                 files.append(content.text)
+                 
+        # Filter by suffix
+        target_files = [f for f in files if f.endswith(suffix)]
+        target_files.sort(reverse=True) # Assuming timestamp naming YYYYMMDD...
+        
+        return target_files[0] if target_files else None
+    except Exception as e:
+        # print(f"Error listing OBS files: {e}")
+        return None
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -269,6 +313,22 @@ def replace():
 @app.route('/comfy_status')
 def comfy_status():
     return jsonify(COMFY_STATUS)
+
+@app.route('/retest_connection', methods=['POST'])
+def retest_connection():
+    try:
+        success = comfy_utils.client.find_fastest_server()
+        status = 'online' if success else 'offline'
+        ip = comfy_utils.client.base_url
+        
+        # Update global status immediately
+        COMFY_STATUS['status'] = status
+        COMFY_STATUS['ip'] = ip
+        COMFY_STATUS['last_checked'] = time.time()
+        
+        return jsonify({'status': 'success', 'connected': success, 'ip': ip})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/upload_character', methods=['POST'])
 def upload_character():
@@ -690,14 +750,32 @@ def check_audio_status(prompt_id):
                 local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
                 if local_path:
                     # Upload to OBS
-                    # Naming: YYYYMMDDHHMMSSaudio.flac
-                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Saudio.flac")
-                    obs_url = obs_utils.upload_file(local_path, output_filename, mime_type='audio/flac')
+                    # Naming: YYYYMMDDHHMMSSaudio.wav
+                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Saudio.wav")
+                    
+                    # Convert to WAV if needed (ComfyUI usually outputs FLAC or WAV)
+                    # The prompt says ComfyUI output is FLAC, we must convert to WAV for OBS/Downstream
+                    wav_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                    
+                    try:
+                        if AudioSegment:
+                            audio = AudioSegment.from_file(local_path)
+                            audio.export(wav_path, format="wav")
+                            print(f"Converted output to WAV: {wav_path}")
+                        else:
+                            # Fallback just rename if pydub missing (risky if not wav)
+                            print("Warning: pydub not found, renaming file to wav without conversion")
+                            shutil.copy(local_path, wav_path)
+                    except Exception as e:
+                        print(f"Failed to convert output to WAV: {e}")
+                        # Fallback to original file but renamed
+                        shutil.copy(local_path, wav_path)
+
+                    obs_url = obs_utils.upload_file(wav_path, output_filename, mime_type='audio/wav')
                     
                     # Rename local file to match so latest_audio can find it
-                    local_renamed_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                    if os.path.exists(local_path):
-                        os.rename(local_path, local_renamed_path)
+                    # local_renamed_path is used for stage 2
+                    local_renamed_path = wav_path
                     
                     if obs_url:
                         # Update task state
@@ -745,18 +823,18 @@ def check_audio_status(prompt_id):
 def get_latest_audio():
     """
     Returns the URL of the latest generated audio from OBS based on naming convention.
-    Naming convention: YYYYMMDDHHMMSSaudio.flac
+    Naming convention: YYYYMMDDHHMMSSaudio.wav
     """
     try:
         # 1. Try to fetch from OBS directly (Stateless)
-        latest_file = get_latest_file_from_obs('audio.flac')
+        latest_file = get_latest_file_from_obs('audio.wav')
         
         if latest_file:
             obs_url = f"http://obs.dimond.top/{latest_file}"
             return jsonify({'url': obs_url, 'filename': latest_file})
             
         # 2. Fallback to local
-        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('audio.flac')]
+        files = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('audio.wav')]
         if not files:
             return jsonify({'url': None})
             
