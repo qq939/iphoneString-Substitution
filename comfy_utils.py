@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Server list for dual-try mechanism
 SERVER_LIST = [
-    "dimond.top:7860",
-    "8.130.124.108:7860"
+    "192.168.0.210:7860",
+    "192.168.50.210:7860"
 ]
 
 class ComfyUIClient:

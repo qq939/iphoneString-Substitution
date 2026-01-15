@@ -22,9 +22,9 @@ class TestDualServer(unittest.TestCase):
         """Test that it picks the first available server"""
         # Setup mock to fail for first server and succeed for second
         def side_effect(url, *args, **kwargs):
-            if "dimond.top" in url:
+            if "192.168.0.210" in url:
                 raise Exception("Connection failed")
-            elif "8.130.124.108" in url:
+            elif "192.168.50.210" in url:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
                 return mock_resp
@@ -39,8 +39,8 @@ class TestDualServer(unittest.TestCase):
         result = self.client.find_fastest_server()
         
         self.assertTrue(result)
-        self.assertIn("8.130.124.108", self.client.base_url)
-        self.assertNotIn("dimond.top", self.client.base_url)
+        self.assertIn("192.168.50.210", self.client.base_url)
+        self.assertNotIn("192.168.0.210", self.client.base_url)
 
     @patch('requests.get')
     def test_find_fastest_server_concurrent_speed(self, mock_get):
@@ -53,12 +53,12 @@ class TestDualServer(unittest.TestCase):
         # If both succeed, the first one to return should be picked.
         
         def side_effect(url, *args, **kwargs):
-            if "dimond.top" in url:
+            if "192.168.0.210" in url:
                 time.sleep(0.2) # Slower
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
                 return mock_resp
-            elif "8.130.124.108" in url:
+            elif "192.168.50.210" in url:
                 time.sleep(0.01) # Faster
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
@@ -70,14 +70,14 @@ class TestDualServer(unittest.TestCase):
         result = self.client.find_fastest_server()
         
         self.assertTrue(result)
-        # Should pick the faster one (8.130.124.108)
-        self.assertIn("8.130.124.108", self.client.base_url)
+        # Should pick the faster one (192.168.50.210)
+        self.assertIn("192.168.50.210", self.client.base_url)
 
     @patch('requests.get')
     def test_check_connection_switch(self, mock_get):
         """Test that check_connection switches server if current fails"""
         # First, set a server manually
-        self.client._set_server_address("dimond.top:7860")
+        self.client._set_server_address("192.168.0.210:7860")
         
         # Mock first call (check_connection) to fail
         # Mock subsequent calls (find_fastest_server) to succeed with other server
@@ -87,19 +87,19 @@ class TestDualServer(unittest.TestCase):
             nonlocal call_count
             call_count += 1
             
-            # First call: check existing connection (dimond.top) -> Fail
+            # First call: check existing connection (192.168.0.210) -> Fail
             if call_count == 1:
-                if "dimond.top" in url:
+                if "192.168.0.210" in url:
                     raise Exception("Connection lost")
             
-            # Subsequent calls: find_fastest_server -> 8.130.124.108 succeeds
-            if "8.130.124.108" in url:
+            # Subsequent calls: find_fastest_server -> 192.168.50.210 succeeds
+            if "192.168.50.210" in url:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
                 return mock_resp
             
-            # dimond.top continues to fail
-            if "dimond.top" in url:
+            # 192.168.0.210 continues to fail
+            if "192.168.0.210" in url:
                 raise Exception("Still down")
                 
             return MagicMock(status_code=404)
@@ -111,7 +111,7 @@ class TestDualServer(unittest.TestCase):
         
         self.assertTrue(result)
         # Should have switched to the other server
-        self.assertIn("8.130.124.108", self.client.base_url)
+        self.assertIn("192.168.50.210", self.client.base_url)
 
 if __name__ == '__main__':
     unittest.main()
