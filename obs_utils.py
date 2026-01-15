@@ -1,6 +1,8 @@
 import logging
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +25,18 @@ def upload_file(file_path, file_name, mime_type=None):
             logger.error(msg)
             return None
 
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,  # Total number of retries
+            backoff_factor=1,  # Wait 1s, 2s, 4s between retries
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these status codes
+            allowed_methods=["PUT"]  # Retry on PUT requests
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session = requests.Session()
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
         # Use requests.put to upload file content
         with open(file_path, 'rb') as f:
             headers = {}
@@ -30,7 +44,8 @@ def upload_file(file_path, file_name, mime_type=None):
                 headers['Content-Type'] = mime_type
                 
             # verify=False is equivalent to -k in curl
-            response = requests.put(target_url, data=f, headers=headers, verify=False)
+            # Set timeout to (connect_timeout, read_timeout)
+            response = session.put(target_url, data=f, headers=headers, verify=False, timeout=(10, 300))
             
         if response.status_code in [200, 201]:
             print(f"DEBUG: Upload successful: {target_url}", flush=True)
