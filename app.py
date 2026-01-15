@@ -399,6 +399,41 @@ def upload_audio():
             temp_path = os.path.join(UPLOAD_FOLDER, f"temp_audio_{uuid.uuid4()}.{ext}")
             file.save(temp_path)
             
+            # Save input video copy immediately if it's a video format
+            # This ensures we have it for Stage 2 before any conversion/cleanup
+            input_video_path_for_stage2 = None
+            if ext in ['mp4', 'mov']:
+                 try:
+                    input_video_filename = f"input_video_{uuid.uuid4()}.{ext}"
+                    input_video_path = os.path.join(UPLOAD_FOLDER, input_video_filename)
+                    shutil.copy(temp_path, input_video_path)
+                    
+                    # Verify it has video stream using MoviePy
+                    is_valid_video = False
+                    try:
+                        clip = VideoFileClip(input_video_path)
+                        if clip.duration and clip.duration > 0 and clip.w > 0 and clip.h > 0:
+                            is_valid_video = True
+                            print(f"Video verification passed for {input_video_filename}: {clip.w}x{clip.h}, {clip.duration}s")
+                        clip.close()
+                    except Exception as e:
+                        print(f"Video verification failed for {input_video_filename}: {e}")
+                        if ext == 'mov':
+                            is_valid_video = True
+                            print(f"Fallback: Treating {input_video_filename} as valid video because extension is .mov")
+                        else:
+                            is_valid_video = False
+                        
+                    if is_valid_video:
+                        input_video_path_for_stage2 = input_video_path
+                        print(f"Saved input video for Stage 2: {input_video_path}")
+                    else:
+                        print(f"File {ext} does not appear to be a valid video, ignoring for Stage 2.")
+                        if os.path.exists(input_video_path):
+                            os.remove(input_video_path)
+                 except Exception as e:
+                     print(f"Failed to save input video copy: {e}")
+            
             # Convert to wav
             if AudioSegment:
                 try:
@@ -500,55 +535,11 @@ def upload_audio():
             task_info = {
                 'status': 'pending',
                 'url': None,
-                'input_video_path': None
+                'input_video_path': input_video_path_for_stage2
             }
             
             # Check if input was a video and save it for Stage 2 if so
-            if file and file.filename != '':
-                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-                # If it is a video format (excluding m4a which is audio)
-                if ext in ['mp4', 'mov']:
-                    # It might be a video. Let's save a persistent copy for Stage 2.
-                    # We can't reuse temp_path because it gets deleted/converted.
-                    # But we can save a copy before conversion/cleanup.
-                    
-                    try:
-                        # Let's copy temp_path to a persistent path
-                        input_video_filename = f"input_video_{uuid.uuid4()}.{ext}"
-                        input_video_path = os.path.join(UPLOAD_FOLDER, input_video_filename)
-                        shutil.copy(temp_path, input_video_path)
-                        
-                        # Verify it has video stream using MoviePy
-                        # This avoids treating audio-only mp4/m4a as video
-                        is_valid_video = False
-                        try:
-                            clip = VideoFileClip(input_video_path)
-                            if clip.duration and clip.duration > 0 and clip.w > 0 and clip.h > 0:
-                                # Check if it actually has video frames (sometimes audio only clip has size?)
-                                # Usually audio only clip has w=None or similar, or we can check clip.rotation etc.
-                                is_valid_video = True
-                                print(f"Video verification passed for {input_video_filename}: {clip.w}x{clip.h}, {clip.duration}s")
-                            clip.close()
-                        except Exception as e:
-                            print(f"Video verification failed for {input_video_filename}: {e}")
-                            # Fallback: If it's a MOV file, we assume it's a video even if MoviePy fails
-                            # (e.g. due to codec issues). MP4 might be audio-only, so we stay strict for MP4 unless we want to risk it.
-                            if ext == 'mov':
-                                is_valid_video = True
-                                print(f"Fallback: Treating {input_video_filename} as valid video because extension is .mov")
-                            else:
-                                is_valid_video = False
-                            
-                        if is_valid_video:
-                            task_info['input_video_path'] = input_video_path
-                            print(f"Saved input video for Stage 2: {input_video_path}")
-                        else:
-                            print(f"File {ext} does not appear to be a valid video, ignoring for Stage 2.")
-                            if os.path.exists(input_video_path):
-                                os.remove(input_video_path)
-                        
-                    except Exception as e:
-                        print(f"Failed to save input video copy: {e}")
+            # (Moved logic to before cleanup)
 
             AUDIO_TASKS[prompt_id] = task_info
             
@@ -712,7 +703,7 @@ def process_digital_human_video(audio_path, input_video_path=None):
                 elif status == 'FAILED':
                     print(f"Task failed: {result}")
                     break
-                    2
+                    
             except Exception as e:
                 print(f"Error checking task: {e}")
                 # Retry
