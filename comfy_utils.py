@@ -8,27 +8,86 @@ import urllib.request
 import shutil
 import tempfile
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Server list for dual-try mechanism
+SERVER_LIST = [
+    "dimond.top:7860",
+    "8.130.124.108:7860"
+]
+
 class ComfyUIClient:
-    def __init__(self, server_address="dimond.top:7860"):
+    def __init__(self, server_address=None):
+        self.client_id = str(uuid.uuid4())
+        self.server_address = None
+        self.base_url = None
+        
+        # If server_address is provided, try to use it
+        if server_address:
+            self._set_server_address(server_address)
+        else:
+            # Try to find the fastest server
+            self.find_fastest_server()
+
+    def _set_server_address(self, address):
         # Force HTTP as requested, removing HTTPS if present
-        if server_address.startswith("https://"):
-            server_address = server_address.replace("https://", "http://")
-        elif not server_address.startswith("http://"):
-            server_address = f"http://{server_address}"
+        if address.startswith("https://"):
+            address = address.replace("https://", "http://")
+        elif not address.startswith("http://"):
+            address = f"http://{address}"
             
-        self.base_url = server_address.rstrip("/")
+        self.base_url = address.rstrip("/")
         self.server_address = self.base_url.replace("http://", "").replace("https://", "")
         logger.info(f"ComfyUIClient initialized with server: {self.base_url}")
 
+    def find_fastest_server(self):
+        """
+        Pings all servers in SERVER_LIST concurrently and sets the base_url to the first one that responds.
+        """
+        logger.info("Attempting to find fastest server...")
+        
+        def check_server(server):
+            try:
+                # Force HTTP
+                if server.startswith("https://"):
+                    server = server.replace("https://", "http://")
+                elif not server.startswith("http://"):
+                    server = f"http://{server}"
+                
+                url = f"{server.rstrip('/')}/object_info"
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                response = requests.get(url, timeout=5, headers=headers)
+                if response.status_code == 200:
+                    return server
+            except:
+                pass
+            return None
+
+        with ThreadPoolExecutor(max_workers=len(SERVER_LIST)) as executor:
+            future_to_server = {executor.submit(check_server, server): server for server in SERVER_LIST}
+            for future in as_completed(future_to_server):
+                result = future.result()
+                if result:
+                    logger.info(f"Fastest server found: {result}")
+                    self._set_server_address(result)
+                    return True
+        
+        logger.warning("No available server found. Defaulting to first in list.")
+        self._set_server_address(SERVER_LIST[0])
+        return False
+
     def check_connection(self, timeout=5):
         """
-        Checks if the server is reachable.
+        Checks if the server is reachable. If not, tries to switch to another server.
         """
+        if not self.base_url:
+            self.find_fastest_server()
+            
         try:
             url = f"{self.base_url}/object_info"
             # Add headers to mimic browser/standard client
@@ -37,6 +96,10 @@ class ComfyUIClient:
             return response.status_code == 200
         except Exception as e:
             # logger.debug(f"Connection check failed: {e}") # Reduce noise
+            # If connection fails, try to re-find server
+            logger.info("Connection failed, attempting to switch server...")
+            if self.find_fastest_server():
+                return True
             return False
 
     def ensure_connection(self):
