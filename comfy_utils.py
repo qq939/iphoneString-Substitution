@@ -341,24 +341,53 @@ def check_status(prompt_id):
     try:
         history = client.get_history(prompt_id)
         if prompt_id in history:
+            # Log detailed response content as requested
+            logger.info(f"Task {prompt_id} completed. History data: {json.dumps(history[prompt_id], indent=2, ensure_ascii=False)}")
+            
             outputs = history[prompt_id].get('outputs', {})
             
-            # Try to find output in preferred nodes or any node
-            for node_id in ["243"] + list(outputs.keys()):
-                if node_id in outputs:
-                    node_output = outputs[node_id]
-                    for type_key in ['gifs', 'videos', 'images', 'audio']:
-                        files = node_output.get(type_key, [])
-                        if files:
-                            file_info = files[0]
-                            return "SUCCEEDED", {
-                                "filename": file_info.get('filename'),
-                                "subfolder": file_info.get('subfolder', ''),
-                                "type": file_info.get('type', 'output')
-                            }
+            # Collect all outputs to find the best one
+            all_files = []
+            for node_id, node_output in outputs.items():
+                for type_key in ['gifs', 'videos', 'images', 'audio']:
+                    if type_key in node_output:
+                        for file_info in node_output[type_key]:
+                            all_files.append({
+                                'node_id': node_id,
+                                'type_key': type_key,
+                                'file_info': file_info
+                            })
+            
+            if all_files:
+                # Sort outputs to prioritize video > image > audio
+                # And prioritize specific nodes if needed (e.g. Node 15 for VHS_VideoCombine)
+                def sort_key(item):
+                    # Lower score is better
+                    type_priority = {'videos': 0, 'gifs': 1, 'images': 2, 'audio': 3}
+                    
+                    # Prefer Node 15 (Video Combine) if present
+                    node_priority = 0 if item['node_id'] == '15' else 1
+                    
+                    return (node_priority, type_priority.get(item['type_key'], 99))
+                
+                all_files.sort(key=sort_key)
+                
+                best_file = all_files[0]
+                file_info = best_file['file_info']
+                
+                logger.info(f"Selected output: Node {best_file['node_id']} ({best_file['type_key']}) - {file_info.get('filename')}")
+                
+                return "SUCCEEDED", {
+                    "filename": file_info.get('filename'),
+                    "subfolder": file_info.get('subfolder', ''),
+                    "type": file_info.get('type', 'output')
+                }
+            
             return "FAILED", "No output found"
             
         status = client.is_task_running(prompt_id)
+        logger.info(f"Querying task progress for {prompt_id}: {status}")
+        
         if status in ["PENDING", "RUNNING"]:
             return status, None
         
