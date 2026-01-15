@@ -1,0 +1,104 @@
+{
+  "14": {
+    "inputs": {
+      "video": "v14044g50000d55n63vog65jf1b3c4cg.mp4",
+      "force_rate": 10,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 60,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "AnimateDiff"
+    },
+    "class_type": "VHS_LoadVideo",
+    "_meta": {
+      "title": "Load Video (Upload) 🎥🅥🅗🅢"
+    }
+  },
+  "15": {
+    "inputs": {
+      "frame_rate": [
+        "61",
+        5
+      ],
+      "loop_count": 0,
+      "filename_prefix": "AnimateDiff",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "63",
+        0
+      ],
+      "audio": [
+        "66",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "43": {
+    "inputs": {
+      "audioUI": "",
+      "audio": [
+        "66",
+        0
+      ]
+    },
+    "class_type": "PreviewAudio",
+    "_meta": {
+      "title": "预览音频"
+    }
+  },
+  "61": {
+    "inputs": {
+      "video_info": [
+        "14",
+        3
+      ]
+    },
+    "class_type": "VHS_VideoInfo",
+    "_meta": {
+      "title": "Video Info 🎥🅥🅗🅢"
+    }
+  },
+  "63": {
+    "inputs": {
+      "mode": "pingpong",
+      "stop_heygem": false,
+      "fps": [
+        "61",
+        5
+      ],
+      "audio": [
+        "66",
+        0
+      ],
+      "video": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "HeyGemRun",
+    "_meta": {
+      "title": "HeyGem AI Avatar"
+    }
+  },
+  "66": {
+    "inputs": {
+      "audio": "ComfyUI_00011_.flac",
+      "audioUI": ""
+    },
+    "class_type": "LoadAudio",
+    "_meta": {
+      "title": "加载音频"
+    }
+  }
+}

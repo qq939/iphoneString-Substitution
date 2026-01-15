@@ -437,27 +437,33 @@ def upload_audio():
                     # We can't reuse temp_path because it gets deleted/converted.
                     # But we can save a copy before conversion/cleanup.
                     
-                    # Re-read file? No, it's a stream/file object. 
-                    # We saved it to temp_path already.
-                    # Let's verify if it has video stream?
-                    # For now, trust extension or use MoviePy to check.
-                    
                     try:
-                        # Quick check if it can be opened as video
-                        # We do this check before conversion logic if possible, 
-                        # but conversion logic is right after save.
-                        
                         # Let's copy temp_path to a persistent path
                         input_video_filename = f"input_video_{uuid.uuid4()}.{ext}"
                         input_video_path = os.path.join(UPLOAD_FOLDER, input_video_filename)
                         shutil.copy(temp_path, input_video_path)
                         
-                        # Verify it has video?
-                        # If audio-only mp4/mov (rare but possible), VideoFileClip might still open it but have no duration or size?
-                        # Let's assume if extension is mp4/mov it is intended as video.
-                        
-                        task_info['input_video_path'] = input_video_path
-                        print(f"Saved input video for Stage 2: {input_video_path}")
+                        # Verify it has video stream using MoviePy
+                        # This avoids treating audio-only mp4/m4a as video
+                        is_valid_video = False
+                        try:
+                            clip = VideoFileClip(input_video_path)
+                            if clip.duration and clip.duration > 0 and clip.w > 0 and clip.h > 0:
+                                # Check if it actually has video frames (sometimes audio only clip has size?)
+                                # Usually audio only clip has w=None or similar, or we can check clip.rotation etc.
+                                is_valid_video = True
+                            clip.close()
+                        except Exception as e:
+                            print(f"Video verification failed: {e}")
+                            is_valid_video = False
+                            
+                        if is_valid_video:
+                            task_info['input_video_path'] = input_video_path
+                            print(f"Saved input video for Stage 2: {input_video_path}")
+                        else:
+                            print(f"File {ext} does not appear to be a valid video, ignoring for Stage 2.")
+                            if os.path.exists(input_video_path):
+                                os.remove(input_video_path)
                         
                     except Exception as e:
                         print(f"Failed to save input video copy: {e}")

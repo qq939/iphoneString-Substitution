@@ -7,7 +7,33 @@ import math
 # Add parent directory to path to import app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import modify_digital_human_workflow
+from app import modify_digital_human_workflow, modify_extend_video_workflow
+
+def test_modify_extend_workflow():
+    # 1. Load the extend video workflow
+    workflow_path = os.path.join('comfyapi', '扩展视频到音频长度.json')
+    if not os.path.exists(workflow_path):
+        print(f"Skipping test_modify_extend_workflow: {workflow_path} not found")
+        return
+
+    with open(workflow_path, 'r', encoding='utf-8') as f:
+        workflow = json.load(f)
+
+    # 2. Define inputs
+    video_filename = "test_input_video.mp4"
+    audio_filename = "test_audio.wav"
+    
+    # 3. Modify
+    modified_workflow = modify_extend_video_workflow(workflow, video_filename, audio_filename)
+    
+    # 4. Assertions
+    # Check Video Node (14)
+    assert modified_workflow["14"]["inputs"]["video"] == video_filename, "Video filename not updated"
+    
+    # Check Audio Node (66)
+    assert modified_workflow["66"]["inputs"]["audio"] == audio_filename, "Audio filename not updated"
+    
+    print("Extend workflow modification test passed!")
 
 def test_modify_workflow():
     # 1. Load the original workflow
@@ -36,10 +62,6 @@ def test_modify_workflow():
     assert new_seed == 0, "Seed should be 0"
     
     # Check Frame Length Calculation
-    # Default FPS is usually 25 in code if not found in workflow, but let's see.
-    # In modify_digital_human_workflow, we set fps=25 default.
-    # But wait, does Node 60 exist in the json?
-    # Let's check if "60" is in workflow.json. Yes it is.
     fps = workflow["60"]["inputs"]["fps"]
     expected_length = int(math.ceil(audio_duration * fps))
     
@@ -50,8 +72,6 @@ def test_modify_workflow():
 
 def test_audio_slicing_logic():
     # This test simulates the audio slicing logic without actually processing heavy files
-    # We can mock AudioFileClip or just verify the math
-    
     total_duration = 25 # seconds
     segment_duration = 5 # Updated to 5s
     
@@ -77,4 +97,5 @@ def test_audio_slicing_logic():
 
 if __name__ == "__main__":
     test_modify_workflow()
+    test_modify_extend_workflow()
     test_audio_slicing_logic()
