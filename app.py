@@ -403,6 +403,8 @@ def upload_audio():
             if AudioSegment:
                 try:
                     audio = AudioSegment.from_file(temp_path)
+                    # Enforce standard WAV format: 44.1kHz, 16-bit, Stereo
+                    audio = audio.set_frame_rate(44100).set_sample_width(2).set_channels(2)
                     audio.export(wav_path, format="wav")
                 except Exception as e:
                     print(f"Audio conversion failed: {e}, attempting direct copy/rename if wav")
@@ -760,6 +762,8 @@ def check_audio_status(prompt_id):
                     try:
                         if AudioSegment:
                             audio = AudioSegment.from_file(local_path)
+                            # Enforce standard WAV format: 44.1kHz, 16-bit, Stereo
+                            audio = audio.set_frame_rate(44100).set_sample_width(2).set_channels(2)
                             audio.export(wav_path, format="wav")
                             print(f"Converted output to WAV: {wav_path}")
                         else:
