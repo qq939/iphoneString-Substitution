@@ -527,10 +527,17 @@ def upload_audio():
                                 # Check if it actually has video frames (sometimes audio only clip has size?)
                                 # Usually audio only clip has w=None or similar, or we can check clip.rotation etc.
                                 is_valid_video = True
+                                print(f"Video verification passed for {input_video_filename}: {clip.w}x{clip.h}, {clip.duration}s")
                             clip.close()
                         except Exception as e:
-                            print(f"Video verification failed: {e}")
-                            is_valid_video = False
+                            print(f"Video verification failed for {input_video_filename}: {e}")
+                            # Fallback: If it's a MOV file, we assume it's a video even if MoviePy fails
+                            # (e.g. due to codec issues). MP4 might be audio-only, so we stay strict for MP4 unless we want to risk it.
+                            if ext == 'mov':
+                                is_valid_video = True
+                                print(f"Fallback: Treating {input_video_filename} as valid video because extension is .mov")
+                            else:
+                                is_valid_video = False
                             
                         if is_valid_video:
                             task_info['input_video_path'] = input_video_path
