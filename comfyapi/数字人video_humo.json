@@ -179,9 +179,9 @@
       "seed": 1067760026265042,
       "steps": 8,
       "cfg": 6.5,
-      "sampler_name": "uni_pc",
+      "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 0.8,
+      "denoise": 0.4,
       "model": [
         "48",
         0
@@ -231,7 +231,7 @@
         0
       ],
       "ref_image_strength": 0.92,
-      "audio_driven_strength": 0.95,
+      "audio_driven_strength": 0.65,
       "face_align_strength": 0.9
     },
     "class_type": "WanHuMoImageToVideo",
