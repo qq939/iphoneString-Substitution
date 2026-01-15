@@ -128,14 +128,28 @@ def modify_extend_video_workflow(workflow, video_filename, audio_filename):
     """
     Modifies the extend video to audio length workflow.
     """
-    # 1. Update Video (Node 14)
-    if "14" in workflow and "inputs" in workflow["14"]:
-        workflow["14"]["inputs"]["video"] = video_filename
+    # 1. Update Video (Node 164)
+    # The new JSON seems to use node 164 for video input
+    if "164" in workflow and "inputs" in workflow["164"]:
+        workflow["164"]["inputs"]["image"] = video_filename
         
-    # 2. Update Audio (Node 66)
-    if "66" in workflow and "inputs" in workflow["66"]:
-        workflow["66"]["inputs"]["audio"] = audio_filename
+    # 2. Update Audio (Node 58)
+    # The new JSON uses LoadAudioMW (Node 58) for audio input
+    if "58" in workflow and "inputs" in workflow["58"]:
+        # LoadAudioMW usually takes 'audio' widget value, not input link
+        # But ComfyUI API often treats widget values as inputs in JSON
+        # Let's check if 'audio' is in inputs or widgets_values
+        # Based on the read file: "inputs": [{"name": "audio", "type": "COMBO", "widget": {"name": "audio"}}]
+        # So we should update widgets_values or inputs depending on how ComfyUI API expects it.
+        # For API format (which we are likely using if we submit JSON), it's usually in "inputs" or "widgets_values".
+        # However, for API format, "inputs" usually contains the values.
+        # Let's try setting it in inputs["audio"]
+        workflow["58"]["inputs"]["audio"] = audio_filename
         
+    # Also check if there are other nodes like HeyGemRun (Node 63) that need inputs
+    # Node 63 takes audio from 163 (MinimalPauseNode) <- 149 (LoadAudioMW)
+    # Node 63 takes video from 164 (LoadImage)
+    
     return workflow
 
 def generate_1s_video(image_path, output_path):
