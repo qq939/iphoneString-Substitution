@@ -381,24 +381,32 @@ def upload_audio():
             obs_tone_url = "http://obs.dimond.top/tone.wav"
             print(f"No file uploaded, downloading from OBS: {obs_tone_url}")
             
+            # Step 1: Download
             try:
                 wav_filename = f"tone_{uuid.uuid4()}.wav"
                 wav_path = os.path.join(UPLOAD_FOLDER, wav_filename)
                 
-                # Download
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 response = requests.get(obs_tone_url, stream=True, timeout=30, headers=headers)
+                
                 if response.status_code == 200:
                     with open(wav_path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
+                    print(f"Successfully downloaded tone.wav ({os.path.getsize(wav_path)} bytes)")
                 else:
+                    print(f"OBS Download failed with status: {response.status_code}")
                     return jsonify({'error': f'Failed to download tone.wav from OBS: {response.status_code}'}), 500
-                    
-                # Upload to ComfyUI
+            except Exception as e:
+                print(f"OBS Download Exception: {e}")
+                return jsonify({'error': f'Exception downloading from OBS: {str(e)}'}), 500
+
+            # Step 2: Upload to ComfyUI
+            try:
+                print(f"Uploading {wav_filename} to ComfyUI...")
                 comfy_res = comfy_utils.client.upload_file(wav_path)
                 if not comfy_res:
-                    return jsonify({'error': 'Failed to upload downloaded tone.wav to ComfyUI'}), 500
+                    return jsonify({'error': 'Failed to upload downloaded tone.wav to ComfyUI (Response empty)'}), 500
                 uploaded_filename = comfy_res.get('name')
                 
                 # Clean up local file
@@ -406,7 +414,11 @@ def upload_audio():
                     os.remove(wav_path)
                     
             except Exception as e:
-                return jsonify({'error': f'Error handling OBS fallback: {str(e)}'}), 500
+                print(f"ComfyUI Upload Exception: {e}")
+                # Clean up even on failure
+                if os.path.exists(wav_path):
+                    os.remove(wav_path)
+                return jsonify({'error': f'Failed to upload to ComfyUI: {str(e)}'}), 500
 
         # Load Workflow
         workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', 'audio_workflow.json')
