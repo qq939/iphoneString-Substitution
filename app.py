@@ -422,10 +422,47 @@ def upload_audio():
         
         if prompt_id:
             # Register audio task
-            AUDIO_TASKS[prompt_id] = {
+            task_info = {
                 'status': 'pending',
-                'url': None
+                'url': None,
+                'input_video_path': None
             }
+            
+            # Check if input was a video and save it for Stage 2 if so
+            if file and file.filename != '':
+                ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+                # If it is a video format (excluding m4a which is audio)
+                if ext in ['mp4', 'mov']:
+                    # It might be a video. Let's save a persistent copy for Stage 2.
+                    # We can't reuse temp_path because it gets deleted/converted.
+                    # But we can save a copy before conversion/cleanup.
+                    
+                    # Re-read file? No, it's a stream/file object. 
+                    # We saved it to temp_path already.
+                    # Let's verify if it has video stream?
+                    # For now, trust extension or use MoviePy to check.
+                    
+                    try:
+                        # Quick check if it can be opened as video
+                        # We do this check before conversion logic if possible, 
+                        # but conversion logic is right after save.
+                        
+                        # Let's copy temp_path to a persistent path
+                        input_video_filename = f"input_video_{uuid.uuid4()}.{ext}"
+                        input_video_path = os.path.join(UPLOAD_FOLDER, input_video_filename)
+                        shutil.copy(temp_path, input_video_path)
+                        
+                        # Verify it has video?
+                        # If audio-only mp4/mov (rare but possible), VideoFileClip might still open it but have no duration or size?
+                        # Let's assume if extension is mp4/mov it is intended as video.
+                        
+                        task_info['input_video_path'] = input_video_path
+                        print(f"Saved input video for Stage 2: {input_video_path}")
+                        
+                    except Exception as e:
+                        print(f"Failed to save input video copy: {e}")
+
+            AUDIO_TASKS[prompt_id] = task_info
             
             # Clean up generated wav path if we created it
             if file and file.filename != '' and os.path.exists(wav_path):
@@ -444,7 +481,7 @@ def upload_audio():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-def process_digital_human_video(audio_path):
+def process_digital_human_video(audio_path, input_video_path=None):
     """
     Background task to generate digital human video.
     """
@@ -454,46 +491,61 @@ def process_digital_human_video(audio_path):
         # 1. Prepare Inputs
         # Audio is already at audio_path (local)
         
-        # Download Character from OBS
-        character_url = "http://obs.dimond.top/character.png"
-        character_filename = f"character_{uuid.uuid4()}.png"
-        character_path = os.path.join(UPLOAD_FOLDER, character_filename)
+        uploaded_video_name = None
+        character_path = None
+        video_1s_path = None
         
-        print(f"Downloading character from {character_url}...")
-        try:
-            response = requests.get(character_url, stream=True, timeout=30)
-            if response.status_code == 200:
-                with open(character_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            else:
-                print(f"Failed to download character: {response.status_code}")
+        if input_video_path and os.path.exists(input_video_path):
+            print(f"Using provided input video: {input_video_path}")
+            # Upload input video directly
+            print("Uploading input video to ComfyUI...")
+            comfy_video = comfy_utils.client.upload_file(input_video_path)
+            if not comfy_video:
+                print("Failed to upload input video to ComfyUI")
                 return
-        except Exception as e:
-            print(f"Error downloading character: {e}")
-            return
+            uploaded_video_name = comfy_video.get('name')
+            
+        else:
+            # Fallback to Character logic
+            # Download Character from OBS
+            character_url = "http://obs.dimond.top/character.png"
+            character_filename = f"character_{uuid.uuid4()}.png"
+            character_path = os.path.join(UPLOAD_FOLDER, character_filename)
+            
+            print(f"Downloading character from {character_url}...")
+            try:
+                response = requests.get(character_url, stream=True, timeout=30)
+                if response.status_code == 200:
+                    with open(character_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                else:
+                    print(f"Failed to download character: {response.status_code}")
+                    return
+            except Exception as e:
+                print(f"Error downloading character: {e}")
+                return
 
-        # 2. Generate 1s Video from Character
-        print("Generating 1s video from character...")
-        video_1s_filename = f"character_1s_{uuid.uuid4()}.mp4"
-        video_1s_path = os.path.join(UPLOAD_FOLDER, video_1s_filename)
-        try:
-            generate_1s_video(character_path, video_1s_path)
-        except Exception as e:
-            print(f"Error generating 1s video: {e}")
-            return
+            # Generate 1s Video from Character
+            print("Generating 1s video from character...")
+            video_1s_filename = f"character_1s_{uuid.uuid4()}.mp4"
+            video_1s_path = os.path.join(UPLOAD_FOLDER, video_1s_filename)
+            try:
+                generate_1s_video(character_path, video_1s_path)
+            except Exception as e:
+                print(f"Error generating 1s video: {e}")
+                return
 
-        # 3. Upload to ComfyUI
-        print("Uploading files to ComfyUI...")
-        
-        # Upload 1s Video
-        comfy_video = comfy_utils.client.upload_file(video_1s_path)
-        if not comfy_video:
-            print("Failed to upload 1s video to ComfyUI")
-            return
-        uploaded_video_name = comfy_video.get('name')
+            # Upload 1s Video
+            print("Uploading 1s video to ComfyUI...")
+            comfy_video = comfy_utils.client.upload_file(video_1s_path)
+            if not comfy_video:
+                print("Failed to upload 1s video to ComfyUI")
+                return
+            uploaded_video_name = comfy_video.get('name')
         
         # Upload Full Audio
+        print("Uploading audio to ComfyUI...")
         comfy_audio = comfy_utils.client.upload_file(audio_path)
         if not comfy_audio:
             print("Failed to upload audio to ComfyUI")
@@ -635,7 +687,12 @@ def check_audio_status(prompt_id):
                         # Trigger Digital Human Video Generation (Stage 2)
                         # We do this in a background thread to avoid blocking the response
                         print(f"Audio upload successful. Triggering digital human video generation with {local_renamed_path}")
-                        thread = threading.Thread(target=process_digital_human_video, args=(local_renamed_path,))
+                        
+                        input_video_path = None
+                        if prompt_id in AUDIO_TASKS and 'input_video_path' in AUDIO_TASKS[prompt_id]:
+                            input_video_path = AUDIO_TASKS[prompt_id]['input_video_path']
+                            
+                        thread = threading.Thread(target=process_digital_human_video, args=(local_renamed_path, input_video_path))
                         thread.daemon = True
                         thread.start()
                         
