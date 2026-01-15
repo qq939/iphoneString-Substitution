@@ -5,7 +5,7 @@
       "force_rate": 10,
       "custom_width": 0,
       "custom_height": 0,
-      "frame_load_cap": 60,
+      "frame_load_cap": 30,
       "skip_first_frames": 0,
       "select_every_nth": 1,
       "format": "AnimateDiff"
