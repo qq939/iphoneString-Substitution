@@ -49,11 +49,11 @@ def check_comfy_status():
             # Or just check if we can reach it
             if comfy_utils.client.check_connection():
                 if COMFY_STATUS['status'] != 'online':
-                    print(f"ComfyUI is ONLINE at {comfy_utils.client.server_address}")
+                    print(f"ComfyUI is ONLINE at {comfy_utils.client.base_url}")
                 COMFY_STATUS['status'] = 'online'
             else:
                 if COMFY_STATUS['status'] != 'offline':
-                    print("ComfyUI is OFFLINE")
+                    print(f"ComfyUI is OFFLINE at {comfy_utils.client.base_url}")
                 COMFY_STATUS['status'] = 'offline'
         except Exception as e:
             print(f"Error checking ComfyUI status: {e}")
