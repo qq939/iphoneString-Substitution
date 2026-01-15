@@ -177,7 +177,7 @@
   "64": {
     "inputs": {
       "seed": 1067760026265042,
-      "steps": 22,
+      "steps": 8,
       "cfg": 6.5,
       "sampler_name": "uni_pc",
       "scheduler": "simple",
