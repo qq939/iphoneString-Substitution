@@ -15,16 +15,20 @@ logger = logging.getLogger(__name__)
 
 class ComfyUIClient:
     def __init__(self, server_address="dimond.top:7860"):
-        self.client_id = str(uuid.uuid4())
-        self.server_address = server_address.replace("http://", "").replace("https://", "").rstrip("/")
-        logger.info(f"ComfyUIClient initialized with server: {self.server_address}")
+        if server_address.startswith("http://") or server_address.startswith("https://"):
+            self.base_url = server_address.rstrip("/")
+        else:
+            self.base_url = f"http://{server_address.rstrip('/')}"
+            
+        self.server_address = self.base_url.replace("http://", "").replace("https://", "")
+        logger.info(f"ComfyUIClient initialized with server: {self.base_url}")
 
     def check_connection(self, timeout=5):
         """
         Checks if the server is reachable.
         """
         try:
-            url = f"http://{self.server_address}/object_info"
+            url = f"{self.base_url}/object_info"
             response = requests.get(url, timeout=timeout)
             return response.status_code == 200
         except:
@@ -44,7 +48,7 @@ class ComfyUIClient:
             p = {"prompt": prompt, "client_id": self.client_id}
             data = json.dumps(p).encode('utf-8')
             
-            url = f"http://{self.server_address}/prompt"
+            url = f"{self.base_url}/prompt"
             req = urllib.request.Request(url, data=data)
             with urllib.request.urlopen(req, timeout=10) as response:
                 response_data = json.loads(response.read())
@@ -52,6 +56,7 @@ class ComfyUIClient:
                     return response_data['prompt_id']
         except Exception as e:
             logger.warning(f"Failed to queue prompt: {e}")
+            raise # Propagate exception to caller
             
         return None
 
@@ -60,7 +65,7 @@ class ComfyUIClient:
         Queries history for the given prompt_id.
         """
         try:
-            url = f"http://{self.server_address}/history/{prompt_id}"
+            url = f"{self.base_url}/history/{prompt_id}"
             logger.info(f"Fetching ComfyUI history: {url}")
             with urllib.request.urlopen(url, timeout=10) as response:
                 data = json.loads(response.read())
@@ -76,10 +81,10 @@ class ComfyUIClient:
         """
         if not os.path.exists(file_path):
             logger.error(f"File not found: {file_path}")
-            return None
+            raise FileNotFoundError(f"File not found: {file_path}")
 
         try:
-            url = f"http://{self.server_address}/upload/image"
+            url = f"{self.base_url}/upload/image"
             
             with open(file_path, 'rb') as f:
                 files = {'image': (os.path.basename(file_path), f)}
@@ -88,8 +93,12 @@ class ComfyUIClient:
                 
                 if response.status_code == 200:
                     return response.json()
+                else:
+                    logger.error(f"Upload failed with status {response.status_code}: {response.text}")
+                    raise Exception(f"Upload failed: {response.status_code} - {response.text}")
         except Exception as e:
             logger.warning(f"Failed to upload file: {e}")
+            raise # Propagate exception to caller
             
         return None
     
@@ -104,7 +113,7 @@ class ComfyUIClient:
                 "type": file_type
             }
             query_string = urllib.parse.urlencode(params)
-            url = f"http://{self.server_address}/view?{query_string}"
+            url = f"{self.base_url}/view?{query_string}"
             
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
@@ -116,14 +125,14 @@ class ComfyUIClient:
             return local_path
         except Exception as e:
             logger.error(f"Download failed: {e}")
-            return None
+            raise # Propagate exception
         
     def get_queue(self):
         """
         Gets the current queue status.
         """
         try:
-            url = f"http://{self.server_address}/queue"
+            url = f"{self.base_url}/queue"
             with urllib.request.urlopen(url, timeout=10) as response:
                 data = json.loads(response.read())
                 return data
@@ -155,7 +164,7 @@ class ComfyUIClient:
         """
         try:
             # 1. Try to delete from queue (if pending)
-            url = f"http://{self.server_address}/queue"
+            url = f"{self.base_url}/queue"
             data = {"delete": [prompt_id]}
             data_json = json.dumps(data).encode('utf-8')
             
@@ -168,7 +177,7 @@ class ComfyUIClient:
             # 2. Check if running and interrupt
             status = self.is_task_running(prompt_id)
             if status == "RUNNING":
-                url = f"http://{self.server_address}/interrupt"
+                url = f"{self.base_url}/interrupt"
                 req = urllib.request.Request(url, data=b"", method='POST')
                 urllib.request.urlopen(req)
             
