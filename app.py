@@ -592,6 +592,7 @@ def process_digital_human_video(audio_path, input_video_path=None):
                 print("Failed to upload input video to ComfyUI")
                 return
             uploaded_video_name = comfy_video.get('name')
+            print(f"Input video uploaded as: {uploaded_video_name}")
             
         else:
             # Fallback to Character logic
