@@ -11,86 +11,10 @@ import shutil
 import json
 from datetime import datetime
 from PIL import Image
-# MoviePy Import Logic with detailed logging
-try:
-    print("Attempting to import moviepy...")
-    from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx, ImageClip
-    import moviepy.video.fx.all as vfx
-    print(f"Successfully imported moviepy.video.fx.all as vfx. Has resize: {hasattr(vfx, 'resize')}")
-except ImportError as e:
-    print(f"ImportError during standard moviepy import: {e}")
-    # MoviePy 2.0+ compatibility or partial install
-    try:
-        from moviepy import VideoFileClip, concatenate_videoclips, AudioFileClip, ImageClip
-        import moviepy.audio.fx as audio_fx
-        import moviepy.video.fx as vfx # Assuming 2.0 structure
-        print("Imported moviepy using fallback/2.0 structure")
-    except ImportError as e2:
-        print(f"Critical Error: Failed to import moviepy: {e2}")
-        raise e2
-    
-    class AFXShim:
-        def audio_loop(self, clip, duration=None):
-            return clip.with_effects([audio_fx.AudioLoop(duration=duration)])
-            
-    afx = AFXShim()
-
-# Explicitly try to import resize function as a standalone fallback
-try:
-    from moviepy.video.fx.resize import resize as explicit_resize
-    print("Successfully imported explicit_resize from moviepy.video.fx.resize")
-except ImportError:
-    try:
-        from moviepy.video.fx.all import resize as explicit_resize
-        print("Successfully imported explicit_resize from moviepy.video.fx.all")
-    except ImportError:
-        explicit_resize = None
-        print("Failed to import explicit_resize")
 
 import comfy_utils
 import obs_utils
-import cv2
-import numpy as np
-
-def opencv_resize_clip(clip, target_height):
-    """
-    Resizes a MoviePy clip using OpenCV.
-    Maintains aspect ratio and ensures dimensions are even.
-    """
-    w, h = clip.size
-    target_width = int(w * target_height / h)
-    
-    # Ensure even dimensions for ffmpeg compatibility
-    if target_width % 2 != 0:
-        target_width += 1
-    if target_height % 2 != 0:
-        target_height += 1
-        
-    def resize_frame(image):
-        # OpenCV expects (width, height) for dsize
-        return cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_AREA)
-        
-    return clip.fl_image(resize_frame)
-
-def safe_subclip(clip, start, end):
-    """
-    Safely subclips a video, handling version differences or missing attributes.
-    """
-    try:
-        if hasattr(clip, 'subclip'):
-            return clip.subclip(start, end)
-        elif hasattr(clip, 'subclipped'):
-            return clip.subclipped(start, end)
-        elif hasattr(clip, 'with_subclip'):
-            return clip.with_subclip(start, end)
-        else:
-            print(f"WARNING: subclip missing on {type(clip)}. Attributes: {dir(clip)}")
-            raise AttributeError(f"Object {type(clip)} has no subclip method")
-    except Exception as e:
-        print(f"Error in safe_subclip: {e}")
-        raise e
-
-
+import ffmpeg_utils
 
 # Add local bin directory to PATH for ffmpeg/ffprobe
 local_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
@@ -217,12 +141,13 @@ def modify_extend_video_workflow(workflow, video_filename, audio_filename):
 
 def generate_1s_video(image_path, output_path):
     """
-    Generates a 1-second 25fps video from an image.
+    Generates a 1-second 25fps video from an image using ffmpeg.
     """
-    clip = ImageClip(image_path)
-    clip = clip.set_duration(1)
-    clip = clip.set_fps(25)
-    clip.write_videofile(output_path, fps=25, codec='libx264', audio=False, logger=None)
+    try:
+        ffmpeg_utils.image_to_video(image_path, output_path, duration=1, fps=25)
+    except Exception as e:
+        print(f"Error generating 1s video: {e}")
+        raise e
 
 def get_substitutions():
     if not os.path.exists(SUBSTITUTION_FILE):
@@ -484,14 +409,13 @@ def upload_audio():
                     input_video_path = os.path.join(UPLOAD_FOLDER, input_video_filename)
                     shutil.copy(temp_path, input_video_path)
                     
-                    # Verify it has video stream using MoviePy
+                    # Verify it has video stream using ffmpeg
                     is_valid_video = False
                     try:
-                        clip = VideoFileClip(input_video_path)
-                        if clip.duration and clip.duration > 0 and clip.w > 0 and clip.h > 0:
+                        info = ffmpeg_utils.get_video_info(input_video_path)
+                        if info.get('duration', 0) > 0 and info.get('width', 0) > 0 and info.get('height', 0) > 0:
                             is_valid_video = True
-                            print(f"Video verification passed for {input_video_filename}: {clip.w}x{clip.h}, {clip.duration}s")
-                        clip.close()
+                            print(f"Video verification passed for {input_video_filename}: {info.get('width')}x{info.get('height')}, {info.get('duration')}s")
                     except Exception as e:
                         print(f"Video verification failed for {input_video_filename}: {e}")
                         if ext == 'mov':
@@ -666,22 +590,15 @@ def process_digital_human_video(audio_path, input_video_path=None):
             stage2_video_path = input_video_path
             trimmed_video_path = None
             try:
-                clip = VideoFileClip(input_video_path)
-                end_time = 3
-                if getattr(clip, "duration", None):
-                    end_time = min(3, clip.duration)
-                trimmed = clip.subclip(0, end_time)
+                info = ffmpeg_utils.get_video_info(input_video_path)
+                duration = info.get('duration', 0)
+                end_time = min(3, duration) if duration > 0 else 3
+                
                 trimmed_video_filename = f"stage2_input_3s_{uuid.uuid4()}.mp4"
                 trimmed_video_path = os.path.join(UPLOAD_FOLDER, trimmed_video_filename)
-                trimmed.write_videofile(trimmed_video_path, codec="libx264", audio=False, logger=None)
-                try:
-                    trimmed.close()
-                except Exception:
-                    pass
-                try:
-                    clip.close()
-                except Exception:
-                    pass
+                
+                ffmpeg_utils.cut_video(input_video_path, trimmed_video_path, 0, end_time)
+                
                 stage2_video_path = trimmed_video_path
                 print(f"Trimmed input video to first {end_time}s: {trimmed_video_path}")
             except Exception as e:
@@ -1116,24 +1033,18 @@ def monitor_group_task(group_id):
                         
                     # Extract 5th frame
                     # Frame 5 (0-indexed is 4)
-                    # We can use moviepy or ffmpeg
-                    # Let's use moviepy
-                    clip = VideoFileClip(result_path)
+                    # We use ffmpeg
                     
-                    # Ensure video is long enough. If < 5 frames, take last one.
-                    # fps is usually 25 or 30 from ComfyUI
-                    # t = 5 / clip.fps if clip.fps else 5/25
-                    # Or simpler: clip.get_frame(t)
+                    info = ffmpeg_utils.get_video_info(result_path)
+                    duration = info.get('duration', 0)
                     
-                    # Let's try to get frame at index 4 (5th frame)
-                    # Time = 4 / clip.fps
-                    t = 4.0 / clip.fps if clip.fps else 4.0/25.0
-                    if t >= clip.duration:
-                        t = clip.duration - 0.01 # Take last frame if shorter
+                    # Assume 25fps if unknown, usually ComfyUI gives 25 or 30
+                    t = 4.0 / 25.0
+                    if duration > 0 and t >= duration:
+                        t = max(0, duration - 0.05) # Take near end
                         
                     frame_path = os.path.join(UPLOAD_FOLDER, datetime.now().strftime("%Y%m%d%H%M%Sone.png"))
-                    clip.save_frame(frame_path, t=t)
-                    clip.close()
+                    ffmpeg_utils.extract_frame(result_path, frame_path, t)
                     
                     # Upload to OBS
                     print(f"Uploading {frame_path} to OBS...")
@@ -1158,48 +1069,41 @@ def monitor_group_task(group_id):
                 try:
                     # Sort by segment index
                     sorted_tasks = sorted(group_data['tasks'], key=lambda x: x['segment_index'])
-                    clips = []
+                    video_paths = []
                     for t in sorted_tasks:
                         if t['result_path'] and os.path.exists(t['result_path']):
-                            clips.append(VideoFileClip(t['result_path']))
+                            video_paths.append(t['result_path'])
                     
-                    if clips:
-                        final_clip = concatenate_videoclips(clips)
+                    if video_paths:
+                        output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
+                        output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                        
+                        # Temp concatenated video (silent)
+                        temp_concat_path = os.path.join(UPLOAD_FOLDER, f"temp_concat_{group_id}.mp4")
+                        ffmpeg_utils.concatenate_videos(video_paths, temp_concat_path)
                         
                         # Merge audio back
                         audio_path = group_data.get('audio_path')
                         if audio_path and os.path.exists(audio_path):
                             try:
-                                audio_clip = AudioFileClip(audio_path)
-                                video_duration = final_clip.duration
-                                audio_duration = audio_clip.duration
-                                
-                                if audio_duration < video_duration:
-                                    # Loop audio
-                                    audio_clip = afx.audio_loop(audio_clip, duration=video_duration)
-                                else:
-                                    # Cut audio
-                                    audio_clip = audio_clip.subclip(0, video_duration)
-                                    
-                                final_clip = final_clip.set_audio(audio_clip)
+                                # Merge audio with loop enabled if needed
+                                # Our merge_audio_video with loop_audio=True will loop it
+                                ffmpeg_utils.merge_audio_video(temp_concat_path, audio_path, output_path, loop_audio=True)
                                 print(f"Merged audio from {audio_path}")
+                                
+                                # Remove temp concat
+                                if os.path.exists(temp_concat_path):
+                                    os.remove(temp_concat_path)
                             except Exception as e:
                                 print(f"Failed to merge audio: {e}")
-                        
-                        output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
-                        output_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                        # Write with audio if available
-                        final_clip.write_videofile(
-                            output_path, 
-                            codec='libx264', 
-                            audio_codec='aac' if final_clip.audio else None,
-                            audio=(final_clip.audio is not None)
-                        )
-                        
-                        # Close clips
-                        final_clip.close()
-                        for c in clips:
-                            c.close()
+                                # If merge fails, just use the silent video? 
+                                # Or maybe move temp to output
+                                if os.path.exists(temp_concat_path):
+                                    shutil.move(temp_concat_path, output_path)
+                        else:
+                            # No audio, just move temp to output
+                            if os.path.exists(temp_concat_path):
+                                shutil.move(temp_concat_path, output_path)
                         
                         # Upload to OBS
                         print(f"Uploading {output_path} to OBS...")
@@ -1282,35 +1186,25 @@ def upload_image_swap():
     
     try:
         # Create a 0.5s video from the image
-        # Using MoviePy ImageClip
+        # Using ffmpeg
         # Duration 0.5s, FPS 30
-        from moviepy.editor import ImageClip
-        
-        # Resize logic: maintain aspect ratio, set height to 848 (same as video swap)
-        # Note: ImageClip resize
-        clip = ImageClip(image_path).set_duration(0.5).set_fps(30)
-        
-        # Resize using OpenCV as requested by user
-        try:
-             clip_resized = opencv_resize_clip(clip, target_height=848)
-        except Exception as e:
-             print(f"OpenCV resize failed: {e}. Falling back to original size.")
-             clip_resized = clip
         
         # Write temp video
         segment_filename = f"segment_{group_id}_0.mp4"
         segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
         
-        clip_resized.write_videofile(
-            segment_path, 
-            fps=30, 
-            codec='libx264', 
-            audio=False, 
-            logger=None
-        )
-        
-        clip.close()
-        clip_resized.close()
+        # Resize and create video in one step
+        try:
+             ffmpeg_utils.resize_image_to_video(
+                 image_path, 
+                 segment_path, 
+                 target_height=848, 
+                 duration=0.5, 
+                 fps=30
+             )
+        except Exception as e:
+             print(f"FFmpeg resize failed: {e}. Falling back to original size.")
+             ffmpeg_utils.image_to_video(image_path, segment_path, duration=0.5, fps=30)
         
         # Submit to ComfyUI (Reuse video swap logic basically)
         # Upload files to ComfyUI
@@ -1443,16 +1337,14 @@ def upload_and_cut():
     # Extract audio immediately
     audio_path = os.path.join(UPLOAD_FOLDER, f"original_audio_{group_id}.mp3")
     try:
-        # We need to extract audio using moviepy before we do anything else
+        # We need to extract audio using ffmpeg before we do anything else
         # Or just use the original file if it has audio
-        # Let's use VideoFileClip to extract
-        temp_clip = VideoFileClip(file_path)
-        if temp_clip.audio:
-            temp_clip.audio.write_audiofile(audio_path, logger=None)
+        info = ffmpeg_utils.get_video_info(file_path)
+        if info.get('has_audio'):
+            ffmpeg_utils.extract_audio(file_path, audio_path)
             has_audio = True
         else:
             has_audio = False
-        temp_clip.close()
     except Exception as e:
         print(f"Failed to extract audio: {e}")
         has_audio = False
@@ -1468,18 +1360,19 @@ def upload_and_cut():
     try:
         # Preprocessing: Resize and set FPS
         # Target: Height 848, FPS 30
-        clip = VideoFileClip(file_path)
         
         # Resize height to 848
-        # clip_resized = clip.resize(height=848)
+        resized_video_path = os.path.join(UPLOAD_FOLDER, f"resized_{group_id}.mp4")
         try:
-             clip_resized = opencv_resize_clip(clip, target_height=848)
+             ffmpeg_utils.resize_video(file_path, resized_video_path, target_height=848)
         except Exception as e:
-             print(f"OpenCV resize failed: {e}. Falling back to original size.")
-             clip_resized = clip
+             print(f"FFmpeg resize failed: {e}. Falling back to original size.")
+             # Just copy if resize fails
+             shutil.copy(file_path, resized_video_path)
         
-        duration = clip.duration
-        fps = 30 # Target FPS
+        info = ffmpeg_utils.get_video_info(resized_video_path)
+        duration = info.get('duration', 0)
+        fps = 30 # Target FPS (ffmpeg command handles this if we add -r)
         
         # Calculate segments (4s duration as requested)
         segment_duration = 4
@@ -1491,21 +1384,12 @@ def upload_and_cut():
             start_time = i * segment_duration
             end_time = min((i + 1) * segment_duration, duration)
             
-            # Create subclip
-            subclip = safe_subclip(clip_resized, start_time, end_time)
-            
             # Generate segment filename
             segment_filename = f"segment_{group_id}_{i}.mp4"
             segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
             
-            # Write segment
-            subclip.write_videofile(
-                segment_path, 
-                fps=fps, 
-                codec='libx264', 
-                audio=False, 
-                logger=None
-            )
+            # Create subclip
+            ffmpeg_utils.cut_video(resized_video_path, segment_path, start_time, end_time)
             
             # Upload files to ComfyUI
             comfy_seg = comfy_utils.client.upload_file(segment_path)
@@ -1533,17 +1417,17 @@ def upload_and_cut():
             else:
                 TASKS_STORE[group_id]['status'] = 'failed'
                 TASKS_STORE[group_id]['error'] = f"Failed to submit segment {i}: {error}"
-                clip.close()
-                clip_resized.close()
+                if os.path.exists(resized_video_path):
+                    os.remove(resized_video_path)
                 return jsonify({'error': f"Failed to submit segment {i}: {error}"}), 500
             
             # Clean up segment file
             if os.path.exists(segment_path):
                 os.remove(segment_path)
                 
-        clip.close()
-        clip_resized.close()
-        
+        if os.path.exists(resized_video_path):
+            os.remove(resized_video_path)
+            
         # Clean up original file
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -1569,6 +1453,8 @@ def upload_and_cut():
             os.remove(file_path)
         if 'character_path' in locals() and os.path.exists(character_path):
             os.remove(character_path)
+        if 'resized_video_path' in locals() and os.path.exists(resized_video_path):
+            os.remove(resized_video_path)
             
         TASKS_STORE[group_id]['status'] = 'failed'
         TASKS_STORE[group_id]['error'] = str(e)
