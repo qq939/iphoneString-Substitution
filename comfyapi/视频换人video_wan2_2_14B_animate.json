@@ -162,7 +162,7 @@
     "inputs": {
       "detect_hand": "disable",
       "detect_body": "disable",
-      "detect_face": "disable",
+      "detect_face": "enable",
       "resolution": [
         "158",
         0
@@ -182,8 +182,8 @@
   },
   "101": {
     "inputs": {
-      "detect_hand": "disable",
-      "detect_body": "disable",
+      "detect_hand": "enable",
+      "detect_body": "enable",
       "detect_face": "disable",
       "resolution": [
         "158",
@@ -678,7 +678,7 @@
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 1,
+      "denoise": 0.4,
       "model": [
         "60",
         0
