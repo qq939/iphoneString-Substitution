@@ -69,7 +69,9 @@ def resize_video(input_path, output_path, target_height):
     cmd = [
         'ffmpeg', '-y',
         '-i', input_path,
-        '-vf', scale_filter,
+        '-vf', f"{scale_filter}:trunc(ow/2)*2:trunc(oh/2)*2", # Ensure even dimensions
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
         '-c:a', 'copy', # Copy audio
         output_path
     ]

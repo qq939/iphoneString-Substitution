@@ -124,6 +124,12 @@ class ComfyUIClient:
                 if 'prompt_id' in response_data:
                     return response_data['prompt_id']
         except Exception as e:
+            if hasattr(e, 'read'):
+                try:
+                    error_body = e.read().decode('utf-8')
+                    logger.warning(f"Failed to queue prompt. Response: {error_body}")
+                except:
+                    pass
             logger.warning(f"Failed to queue prompt: {e}")
             raise # Propagate exception to caller
             
@@ -334,8 +340,15 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
         prompt_id = client.queue_prompt(workflow)
         return (prompt_id, None) if prompt_id else (None, "Failed to queue prompt")
     except Exception as e:
-        logger.error(f"Queue workflow template error: {e}")
-        return None, str(e)
+        error_msg = str(e)
+        if hasattr(e, 'read'):
+            try:
+                error_body = e.read().decode('utf-8')
+                error_msg += f" Response: {error_body}"
+            except:
+                pass
+        logger.error(f"Queue workflow template error: {error_msg}")
+        return None, error_msg
 
 def check_status(prompt_id):
     try:
