@@ -61,7 +61,7 @@ def extract_audio(video_path, output_path):
     ]
     run_command(cmd)
 
-def resize_video(input_path, output_path, target_height):
+def resize_video(input_path, output_path, target_height, fps=30):
     """Resize video maintaining aspect ratio."""
     # Scale filter: -2 means calculate width maintaining aspect ratio and ensuring it's even
     scale_filter = f"scale=-2:{target_height}"
@@ -72,6 +72,7 @@ def resize_video(input_path, output_path, target_height):
         '-vf', f"{scale_filter}:trunc(ow/2)*2:trunc(oh/2)*2", # Ensure even dimensions
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
+        '-r', str(fps),
         '-c:a', 'copy', # Copy audio
         output_path
     ]
@@ -104,7 +105,7 @@ def cut_video(input_path, output_path, start_time, end_time):
         ]
         run_command(cmd)
 
-def image_to_video(image_path, output_path, duration, fps=30):
+def image_to_video(image_path, output_path, duration, fps=20):
     """Create a video from a single image."""
     # Ensure dimensions are even
     # We can use scale filter for that too: scale=trunc(iw/2)*2:trunc(ih/2)*2
@@ -188,7 +189,7 @@ def merge_audio_video(video_path, audio_path, output_path, loop_audio=False):
     
     run_command(cmd)
 
-def resize_image_to_video(image_path, output_path, target_height, duration=0.5, fps=30):
+def resize_image_to_video(image_path, output_path, target_height, duration=0.5, fps=20):
     """Resize image and convert to video in one go."""
     # Scale filter
     scale_filter = f"scale=-2:{target_height}"

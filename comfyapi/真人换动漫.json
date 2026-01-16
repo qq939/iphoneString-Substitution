@@ -269,7 +269,7 @@
   },
   "159": {
     "inputs": {
-      "value": 480
+      "value": 640
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -278,7 +278,7 @@
   },
   "160": {
     "inputs": {
-      "value": 848
+      "value": 640
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -409,8 +409,8 @@
   },
   "232:62": {
     "inputs": {
-      "width": 480,
-      "height": 848,
+      "width": 640,
+      "height": 640,
       "length": 90,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
@@ -479,7 +479,7 @@
   },
   "232:15": {
     "inputs": {
-      "fps": 30,
+      "fps": 20,
       "images": [
         "232:230",
         0
