@@ -243,3 +243,106 @@ h2, h3 {
     color: var(--text-color);
     box-shadow: 0 0 5px var(--text-color);
 }
+
+/* Custom File Input Button */
+::file-selector-button {
+    background: transparent;
+    color: #0f0;
+    border: 1px solid #0f0;
+    font-family: var(--font-family);
+    cursor: pointer;
+    margin-right: 10px;
+    padding: 2px 5px;
+}
+
+::file-selector-button:hover {
+    background: #0f0;
+    color: #000;
+}
+
+::-webkit-file-upload-button {
+    background: transparent;
+    color: #0f0;
+    border: 1px solid #0f0;
+    font-family: var(--font-family);
+    cursor: pointer;
+    margin-right: 10px;
+    padding: 2px 5px;
+}
+
+::-webkit-file-upload-button:hover {
+    background: #0f0;
+    color: #000;
+}
+
+/* Custom Radio and Checkbox */
+input[type="radio"], input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: transparent;
+    border: 1px solid #0f0;
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    vertical-align: middle;
+    cursor: pointer;
+    margin: 0 5px 0 0;
+}
+
+input[type="radio"] {
+    border-radius: 50%;
+}
+
+input[type="checkbox"]:checked {
+    background-color: #0f0;
+    box-shadow: 0 0 5px #0f0;
+    position: relative;
+}
+
+/* Add checkmark for checkbox */
+input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 3px;
+    height: 8px;
+    border: solid black;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+input[type="radio"]:checked {
+    background-color: #0f0;
+    box-shadow: 0 0 5px #0f0;
+}
+
+/* Refresh Button Style */
+#refresh-btn {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 10001;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#refresh-btn svg {
+    width: 100%;
+    height: 100%;
+    stroke: #0f0;
+    fill: none;
+    transition: transform 0.5s ease;
+}
+
+#refresh-btn:hover svg {
+    filter: drop-shadow(0 0 5px #0f0);
+    transform: rotate(180deg);
+}
