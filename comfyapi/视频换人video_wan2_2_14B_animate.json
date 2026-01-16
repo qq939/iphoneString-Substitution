@@ -432,7 +432,7 @@
         "160",
         0
       ],
-      "length": 77,
+      "length": 64,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": 0,
@@ -601,7 +601,7 @@
         "159",
         0
       ],
-      "length": 77,
+      "length": 64,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": [
