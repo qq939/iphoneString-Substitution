@@ -551,7 +551,13 @@ def upload_audio():
             # Check if input was a video and save it for Stage 2 if so
             # (Moved logic to before cleanup)
 
-            AUDIO_TASKS[prompt_id] = task_info
+            with AUDIO_LOCK:
+                AUDIO_TASKS[prompt_id] = task_info
+            
+            # Start background monitor for this task
+            monitor_thread = threading.Thread(target=monitor_audio_task, args=(prompt_id,))
+            monitor_thread.daemon = True
+            monitor_thread.start()
             
             # Clean up generated wav path if we created it
             if file and file.filename != '' and os.path.exists(wav_path):
@@ -765,6 +771,123 @@ def process_digital_human_video(audio_path, input_video_path=None):
         import traceback
         traceback.print_exc()
 
+def process_audio_result(prompt_id, result):
+    """
+    Process the result of an audio task: download, convert, upload to OBS, and trigger Stage 2.
+    Returns (success, url_or_error_message)
+    """
+    try:
+        if isinstance(result, dict):
+            local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+            if local_path:
+                # Upload to OBS
+                # Naming: YYYYMMDDHHMMSSaudio.wav
+                output_filename = datetime.now().strftime("%Y%m%d%H%M%Saudio.wav")
+                
+                # Convert to WAV if needed (ComfyUI usually outputs FLAC or WAV)
+                wav_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                
+                try:
+                    if AudioSegment:
+                        audio = AudioSegment.from_file(local_path)
+                        # Enforce standard WAV format: 44.1kHz, 16-bit, Stereo
+                        audio = audio.set_frame_rate(44100).set_sample_width(2).set_channels(2)
+                        audio.export(wav_path, format="wav")
+                        print(f"Converted output to WAV: {wav_path}")
+                    else:
+                        # Fallback just rename if pydub missing (risky if not wav)
+                        print("Warning: pydub not found, renaming file to wav without conversion")
+                        shutil.copy(local_path, wav_path)
+                except Exception as e:
+                    print(f"Failed to convert output to WAV: {e}")
+                    # Fallback to original file but renamed
+                    shutil.copy(local_path, wav_path)
+
+                obs_url = obs_utils.upload_file(wav_path, output_filename, mime_type='audio/wav')
+                
+                # Rename local file to match so latest_audio can find it
+                # local_renamed_path is used for stage 2
+                local_renamed_path = wav_path
+                
+                if obs_url:
+                    # Update task state
+                    with AUDIO_LOCK:
+                        if prompt_id in AUDIO_TASKS:
+                            AUDIO_TASKS[prompt_id]['status'] = 'completed'
+                            AUDIO_TASKS[prompt_id]['url'] = obs_url
+                    
+                    # Trigger Digital Human Video Generation (Stage 2)
+                    # We do this in a background thread to avoid blocking the response
+                    print(f"Audio upload successful. Triggering digital human video generation with {local_renamed_path}")
+                    
+                    input_video_path = None
+                    with AUDIO_LOCK:
+                        if prompt_id in AUDIO_TASKS and 'input_video_path' in AUDIO_TASKS[prompt_id]:
+                            input_video_path = AUDIO_TASKS[prompt_id]['input_video_path']
+                        
+                    thread = threading.Thread(target=process_digital_human_video, args=(local_renamed_path, input_video_path))
+                    thread.daemon = True
+                    thread.start()
+                    
+                    return True, obs_url
+                else:
+                    return False, 'Failed to upload to OBS'
+            else:
+                return False, 'Failed to download result'
+        else:
+            return False, 'Invalid result format'
+    except Exception as e:
+        print(f"Error processing audio result: {e}")
+        return False, str(e)
+
+def monitor_audio_task(prompt_id):
+    """
+    Background thread to monitor audio task status.
+    """
+    print(f"Started monitoring audio task {prompt_id}")
+    while True:
+        with AUDIO_LOCK:
+            if prompt_id not in AUDIO_TASKS:
+                break
+            status = AUDIO_TASKS[prompt_id]['status']
+            if status in ['completed', 'failed']:
+                break
+            # If processing_result, we assume another thread (maybe check_audio_status) is handling it
+            # But actually we want to handle it if we find it succeeded.
+            # So we continue checking ComfyUI.
+            
+        try:
+            status, result = comfy_utils.check_status(prompt_id)
+            
+            if status == 'SUCCEEDED':
+                # Try to claim processing rights
+                should_process = False
+                with AUDIO_LOCK:
+                    current_status = AUDIO_TASKS.get(prompt_id, {}).get('status')
+                    if current_status not in ['processing_result', 'completed', 'failed']:
+                        AUDIO_TASKS[prompt_id]['status'] = 'processing_result'
+                        should_process = True
+                
+                if should_process:
+                    print(f"Monitor: Task {prompt_id} succeeded. Processing result...")
+                    success, output = process_audio_result(prompt_id, result)
+                    if not success:
+                        with AUDIO_LOCK:
+                            if prompt_id in AUDIO_TASKS:
+                                AUDIO_TASKS[prompt_id]['status'] = 'failed'
+                break # Exit loop after success (or failed processing)
+                
+            elif status == 'FAILED':
+                with AUDIO_LOCK:
+                    if prompt_id in AUDIO_TASKS:
+                        AUDIO_TASKS[prompt_id]['status'] = 'failed'
+                break
+                
+        except Exception as e:
+            print(f"Monitor error for {prompt_id}: {e}")
+            
+        time.sleep(5) # Poll every 5 seconds
+
 @app.route('/check_audio_status/<prompt_id>', methods=['GET'])
 def check_audio_status(prompt_id):
     # Check if we already processed this task
@@ -781,6 +904,7 @@ def check_audio_status(prompt_id):
         
         if status == 'SUCCEEDED':
             # Mark as processing to prevent re-entry
+            should_process = False
             with AUDIO_LOCK:
                 # Double check inside lock
                 if prompt_id in AUDIO_TASKS and AUDIO_TASKS[prompt_id]['status'] in ['processing_result', 'completed']:
@@ -788,74 +912,22 @@ def check_audio_status(prompt_id):
                      
                 if prompt_id in AUDIO_TASKS:
                     AUDIO_TASKS[prompt_id]['status'] = 'processing_result'
+                    should_process = True
                 else:
                     AUDIO_TASKS[prompt_id] = {'status': 'processing_result', 'url': None}
+                    should_process = True
 
-            # Download result
-            if isinstance(result, dict):
-                local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
-                if local_path:
-                    # Upload to OBS
-                    # Naming: YYYYMMDDHHMMSSaudio.wav
-                    output_filename = datetime.now().strftime("%Y%m%d%H%M%Saudio.wav")
-                    
-                    # Convert to WAV if needed (ComfyUI usually outputs FLAC or WAV)
-                    # The prompt says ComfyUI output is FLAC, we must convert to WAV for OBS/Downstream
-                    wav_path = os.path.join(UPLOAD_FOLDER, output_filename)
-                    
-                    try:
-                        if AudioSegment:
-                            audio = AudioSegment.from_file(local_path)
-                            # Enforce standard WAV format: 44.1kHz, 16-bit, Stereo
-                            audio = audio.set_frame_rate(44100).set_sample_width(2).set_channels(2)
-                            audio.export(wav_path, format="wav")
-                            print(f"Converted output to WAV: {wav_path}")
-                        else:
-                            # Fallback just rename if pydub missing (risky if not wav)
-                            print("Warning: pydub not found, renaming file to wav without conversion")
-                            shutil.copy(local_path, wav_path)
-                    except Exception as e:
-                        print(f"Failed to convert output to WAV: {e}")
-                        # Fallback to original file but renamed
-                        shutil.copy(local_path, wav_path)
-
-                    obs_url = obs_utils.upload_file(wav_path, output_filename, mime_type='audio/wav')
-                    
-                    # Rename local file to match so latest_audio can find it
-                    # local_renamed_path is used for stage 2
-                    local_renamed_path = wav_path
-                    
-                    if obs_url:
-                        # Update task state
-                        with AUDIO_LOCK:
-                            AUDIO_TASKS[prompt_id]['status'] = 'completed'
-                            AUDIO_TASKS[prompt_id]['url'] = obs_url
-                        
-                        # Trigger Digital Human Video Generation (Stage 2)
-                        # We do this in a background thread to avoid blocking the response
-                        print(f"Audio upload successful. Triggering digital human video generation with {local_renamed_path}")
-                        
-                        input_video_path = None
-                        if prompt_id in AUDIO_TASKS and 'input_video_path' in AUDIO_TASKS[prompt_id]:
-                            input_video_path = AUDIO_TASKS[prompt_id]['input_video_path']
-                            
-                        thread = threading.Thread(target=process_digital_human_video, args=(local_renamed_path, input_video_path))
-                        thread.daemon = True
-                        thread.start()
-                        
-                        return jsonify({'status': 'completed', 'url': obs_url})
-                    else:
-                        with AUDIO_LOCK:
-                            AUDIO_TASKS[prompt_id]['status'] = 'failed'
-                        return jsonify({'status': 'failed', 'error': 'Failed to upload to OBS'})
+            if should_process:
+                success, output = process_audio_result(prompt_id, result)
+                if success:
+                    return jsonify({'status': 'completed', 'url': output})
                 else:
                     with AUDIO_LOCK:
                         AUDIO_TASKS[prompt_id]['status'] = 'failed'
-                    return jsonify({'status': 'failed', 'error': 'Failed to download result'})
+                    return jsonify({'status': 'failed', 'error': output})
             else:
-                with AUDIO_LOCK:
-                    AUDIO_TASKS[prompt_id]['status'] = 'failed'
-                return jsonify({'status': 'failed', 'error': 'Invalid result format'})
+                 return jsonify({'status': 'processing'})
+
         elif status == 'FAILED':
              with AUDIO_LOCK:
                  if prompt_id in AUDIO_TASKS:
