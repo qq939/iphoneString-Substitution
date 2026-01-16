@@ -72,6 +72,25 @@ def opencv_resize_clip(clip, target_height):
         
     return clip.fl_image(resize_frame)
 
+def safe_subclip(clip, start, end):
+    """
+    Safely subclips a video, handling version differences or missing attributes.
+    """
+    try:
+        if hasattr(clip, 'subclip'):
+            return clip.subclip(start, end)
+        elif hasattr(clip, 'subclipped'):
+            return clip.subclipped(start, end)
+        elif hasattr(clip, 'with_subclip'):
+            return clip.with_subclip(start, end)
+        else:
+            print(f"WARNING: subclip missing on {type(clip)}. Attributes: {dir(clip)}")
+            raise AttributeError(f"Object {type(clip)} has no subclip method")
+    except Exception as e:
+        print(f"Error in safe_subclip: {e}")
+        raise e
+
+
 
 # Add local bin directory to PATH for ffmpeg/ffprobe
 local_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
@@ -1473,7 +1492,7 @@ def upload_and_cut():
             end_time = min((i + 1) * segment_duration, duration)
             
             # Create subclip
-            subclip = clip_resized.subclip(start_time, end_time)
+            subclip = safe_subclip(clip_resized, start_time, end_time)
             
             # Generate segment filename
             segment_filename = f"segment_{group_id}_{i}.mp4"
