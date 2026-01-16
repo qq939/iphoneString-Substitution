@@ -61,15 +61,15 @@ def extract_audio(video_path, output_path):
     ]
     run_command(cmd)
 
-def resize_video(input_path, output_path, target_height, fps=30):
-    """Resize video maintaining aspect ratio."""
-    # Scale filter: -2 means calculate width maintaining aspect ratio and ensuring it's even
-    scale_filter = f"scale=-2:{target_height}"
+def resize_video(input_path, output_path, width=640, height=640, fps=20):
+    """Resize video to specific dimensions (default 640x640, 20fps)."""
+    # Scale filter: strictly 640x640 as requested
+    scale_filter = f"scale={width}:{height}"
     
     cmd = [
         'ffmpeg', '-y',
         '-i', input_path,
-        '-vf', f"{scale_filter}:trunc(ow/2)*2:trunc(oh/2)*2", # Ensure even dimensions
+        '-vf', scale_filter, 
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         '-r', str(fps),
