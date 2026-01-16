@@ -1172,6 +1172,7 @@ def upload_and_cut():
         for i in range(num_segments):
             start_time = i * segment_duration
             end_time = min((i + 1) * segment_duration, duration)
+            current_seg_len = end_time - start_time
             
             # Generate segment filename
             segment_filename = f"segment_{group_id}_{i}.mp4"
@@ -1193,7 +1194,8 @@ def upload_and_cut():
             prompt_id, error = comfy_utils.queue_workflow_template(
                 comfy_char['name'], 
                 comfy_seg['name'], 
-                workflow_type=workflow_type
+                workflow_type=workflow_type,
+                segment_duration=current_seg_len
             )
             
             if prompt_id:
