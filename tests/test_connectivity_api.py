@@ -5,6 +5,7 @@ import time
 import threading
 import sys
 import os
+import unittest.mock
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,11 +26,11 @@ class TestConnectivityAPI(unittest.TestCase):
         self.assertIn('ip', data)
         self.assertIn('last_checked', data)
 
-    def test_retest_connection(self):
+    @unittest.mock.patch('comfy_utils.client.find_fastest_server')
+    def test_retest_connection(self, mock_find):
         """Test /retest_connection endpoint"""
         # Mock find_fastest_server to avoid actual network call delay or failure
-        # But for integration test we might want real call. 
-        # Given the environment, let's try real call first, if it fails (offline), it should still return valid JSON.
+        mock_find.return_value = True
         
         response = self.app.post('/retest_connection')
         data = json.loads(response.data)
@@ -38,9 +39,6 @@ class TestConnectivityAPI(unittest.TestCase):
         if data['status'] == 'success':
             self.assertTrue(data['connected'])
             self.assertIn('ip', data)
-        else:
-            # If it fails, it might return error status if exception raised
-            pass
 
 if __name__ == '__main__':
     unittest.main()

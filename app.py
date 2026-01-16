@@ -11,7 +11,18 @@ import shutil
 import json
 from datetime import datetime
 from PIL import Image
-from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx, ImageClip
+try:
+    from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx, ImageClip
+except ImportError:
+    # MoviePy 2.0+ compatibility
+    from moviepy import VideoFileClip, concatenate_videoclips, AudioFileClip, ImageClip
+    import moviepy.audio.fx as audio_fx
+    
+    class AFXShim:
+        def audio_loop(self, clip, duration=None):
+            return clip.with_effects([audio_fx.AudioLoop(duration=duration)])
+            
+    afx = AFXShim()
 import comfy_utils
 import obs_utils
 
