@@ -13,10 +13,12 @@ from datetime import datetime
 from PIL import Image
 try:
     from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx, ImageClip
+    import moviepy.video.fx.all as vfx
 except ImportError:
     # MoviePy 2.0+ compatibility
     from moviepy import VideoFileClip, concatenate_videoclips, AudioFileClip, ImageClip
     import moviepy.audio.fx as audio_fx
+    import moviepy.video.fx as vfx # Assuming 2.0 structure
     
     class AFXShim:
         def audio_loop(self, clip, duration=None):
@@ -1227,7 +1229,20 @@ def upload_image_swap():
         # Resize
         # If width/height are odd, ffmpeg might complain. Ensure even dimensions.
         # But resize(height=848) handles aspect ratio.
-        clip_resized = clip.resize(height=848)
+        # clip_resized = clip.resize(height=848)
+        # Use vfx.resize explicitly to avoid attribute error
+        try:
+            clip_resized = vfx.resize(clip, height=848)
+        except AttributeError:
+            # Fallback for some versions where vfx might be different or clip has method
+            if hasattr(clip, 'resize'):
+                clip_resized = clip.resize(height=848)
+            else:
+                # Try finding resize in vfx if it's not directly exposed
+                if hasattr(vfx, 'resize'):
+                    clip_resized = vfx.resize(clip, height=848)
+                else:
+                    raise Exception("Cannot find resize function in moviepy")
         
         # Write temp video
         segment_filename = f"segment_{group_id}_0.mp4"
@@ -1403,7 +1418,17 @@ def upload_and_cut():
         clip = VideoFileClip(file_path)
         
         # Resize height to 848
-        clip_resized = clip.resize(height=848)
+        # clip_resized = clip.resize(height=848)
+        try:
+            clip_resized = vfx.resize(clip, height=848)
+        except AttributeError:
+            if hasattr(clip, 'resize'):
+                clip_resized = clip.resize(height=848)
+            else:
+                if hasattr(vfx, 'resize'):
+                    clip_resized = vfx.resize(clip, height=848)
+                else:
+                    raise Exception("Cannot find resize function in moviepy")
         
         duration = clip.duration
         fps = 30 # Target FPS

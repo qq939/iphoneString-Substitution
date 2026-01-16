@@ -18,7 +18,8 @@ def test_upload_and_cut_success(client):
     with patch('app.requests.get') as mock_get, \
          patch('app.VideoFileClip') as MockVideoFileClip, \
          patch('app.comfy_utils.client.upload_file') as mock_upload_file, \
-         patch('app.comfy_utils.queue_workflow_template') as mock_queue_workflow:
+         patch('app.comfy_utils.queue_workflow_template') as mock_queue_workflow, \
+         patch('app.vfx') as mock_vfx:
          
         # Setup requests.get mock for context manager
         mock_response = MagicMock()
@@ -33,6 +34,7 @@ def test_upload_and_cut_success(client):
         mock_clip.duration = 4
         mock_clip.audio = None
         mock_clip.resize.return_value = mock_clip
+        mock_vfx.resize.return_value = mock_clip
         mock_subclip = MagicMock()
         mock_clip.subclip.return_value = mock_subclip
         MockVideoFileClip.return_value = mock_clip

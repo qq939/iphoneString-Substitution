@@ -28,13 +28,15 @@ def test_async_process_flow(client):
          patch('app.comfy_utils') as mock_comfy, \
          patch('app.obs_utils') as mock_obs, \
          patch('app.concatenate_videoclips') as mock_concat, \
-         patch('app.os.remove') as mock_remove:
+         patch('app.os.remove') as mock_remove, \
+         patch('app.vfx') as mock_vfx:
          
         # Setup VideoFileClip mock
         mock_clip = MagicMock()
         mock_clip.duration = 8
         mock_clip.audio = None
         mock_clip.resize.return_value = mock_clip
+        mock_vfx.resize.return_value = mock_clip
         mock_subclip = MagicMock()
         mock_clip.subclip.return_value = mock_subclip
         MockVideoFileClip.return_value = mock_clip

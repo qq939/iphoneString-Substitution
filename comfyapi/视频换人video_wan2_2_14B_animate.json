@@ -70,7 +70,7 @@
   "18": {
     "inputs": {
       "lora_name": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
-      "strength_model": 1,
+      "strength_model": 0.8,
       "model": [
         "20",
         0
@@ -99,7 +99,7 @@
   "20": {
     "inputs": {
       "unet_name": "Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors",
-      "weight_dtype": "default"
+      "weight_dtype": "fp8"
     },
     "class_type": "UNETLoader",
     "_meta": {
@@ -147,7 +147,7 @@
   "99": {
     "inputs": {
       "lora_name": "WanAnimate_relight_lora_fp16.safetensors",
-      "strength_model": 1,
+      "strength_model": 0.8,
       "model": [
         "18",
         0
@@ -204,7 +204,7 @@
   },
   "107": {
     "inputs": {
-      "keep_model_loaded": true,
+      "keep_model_loaded": false,
       "individual_objects": false,
       "sam2_model": [
         "108",
@@ -229,7 +229,7 @@
       "model": "sam2_hiera_base_plus.safetensors",
       "segmentor": "video",
       "device": "cuda",
-      "precision": "fp16"
+      "precision": "fp8"
     },
     "class_type": "DownloadAndLoadSAM2Model",
     "_meta": {
@@ -417,7 +417,7 @@
         "160",
         0
       ],
-      "length": 90,
+      "length": 60,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": 0,
@@ -482,7 +482,7 @@
   },
   "232:15": {
     "inputs": {
-      "fps": 30,
+      "fps": 20,
       "images": [
         "232:230",
         0
