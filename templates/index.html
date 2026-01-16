@@ -78,7 +78,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>当前角色</h2>
+                <h2>当前角色 <span style="cursor: pointer; margin-left: 5px;" onclick="refreshCharacter()">🔄</span></h2>
                 <div id="outputContainer" style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <!-- Character Preview (Initially Hidden) -->
                     <img id="charPreview" src="http://obs.dimond.top/character.png" 
@@ -117,7 +117,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a></h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestVideo(true)">🔄</span></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <video id="latestVideoPreview" autoplay muted loop controls style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #00ff00;">
                         Your browser does not support the video tag.
@@ -165,7 +165,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前音频</a></h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前音频</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestAudio(true)">🔄</span></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <audio id="latestAudioPreview" controls style="width: 90%;">
                         Your browser does not support the audio element.
@@ -202,7 +202,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前图片</a></h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前图片</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestImage(true)">🔄</span></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <img id="latestImagePreview" src="" style="max-width: 90%; max-height: 90%; border: 1px solid #00ff00; object-fit: contain; display: none;" 
                          onload="this.style.display='block'" 
@@ -408,15 +408,19 @@
          };
 
         // Fetch latest video for Grid 7
-        function updateLatestVideo() {
+        function updateLatestVideo(force = false) {
             fetch('/latest_video')
                 .then(response => response.json())
                 .then(data => {
                     if (data.url) {
                         const video = document.getElementById('latestVideoPreview');
-                        // Only update if source changed to avoid flickering
-                        if (!video.src.includes(data.url)) {
-                            video.src = data.url;
+                        // Only update if source changed to avoid flickering, unless forced
+                        if (force || !video.src.includes(data.url)) {
+                            // Add timestamp if forced or just to be safe if url is same
+                            const newSrc = force ? data.url + "?t=" + new Date().getTime() : data.url;
+                            if (video.src !== newSrc) {
+                                video.src = newSrc;
+                            }
                         }
                     }
                 })
@@ -426,6 +430,15 @@
         // Check for latest video every 30 seconds
         updateLatestVideo();
         setInterval(updateLatestVideo, 30000);
+
+        // Character Refresh Logic
+        function refreshCharacter() {
+            const preview = document.getElementById('charPreview');
+            if (preview) {
+                preview.src = "http://obs.dimond.top/character.png?t=" + new Date().getTime();
+                preview.style.display = 'block';
+            }
+        }
 
         // Audio Upload Handler
         document.getElementById('audioUploadForm').onsubmit = async function(e) {
@@ -483,7 +496,7 @@
         };
 
         // Fetch latest audio for Grid 10
-        function updateLatestAudio() {
+        function updateLatestAudio(force = false) {
             fetch('/latest_audio')
                 .then(response => response.json())
                 .then(data => {
@@ -491,9 +504,12 @@
                         const audio = document.getElementById('latestAudioPreview');
                         const nameDiv = document.getElementById('latestAudioName');
                         // Only update if source changed
-                        if (!audio.src.includes(data.url)) {
-                            audio.src = data.url;
-                            nameDiv.innerText = data.filename || 'sound.flac';
+                        if (force || !audio.src.includes(data.url)) {
+                            const newSrc = force ? data.url + "?t=" + new Date().getTime() : data.url;
+                            if (audio.src !== newSrc) {
+                                audio.src = newSrc;
+                                nameDiv.innerText = data.filename || 'sound.flac';
+                            }
                         }
                     }
                 })
@@ -564,7 +580,7 @@
         }
 
         // Latest Image Logic
-        function updateLatestImage() {
+        function updateLatestImage(force = false) {
             fetch('/latest_image')
                 .then(r => r.json())
                 .then(data => {
@@ -572,9 +588,26 @@
                     const name = document.getElementById('latestImageName');
                     if (data.url) {
                         // Add timestamp to prevent caching
-                        img.src = data.url + "?t=" + new Date().getTime();
-                        name.innerText = data.filename;
-                        img.style.display = 'block';
+                        // If force is true, we update the timestamp even if url is same
+                        // But wait, the previous code already added timestamp? 
+                        // "img.src = data.url + "?t=" + new Date().getTime();"
+                        // Yes, it was always adding timestamp on load.
+                        // But if we call this function and src hasn't changed (ignoring query param), browser might not reload?
+                        // Actually, if we generate a NEW timestamp, it will reload.
+                        
+                        // We need to check if base URL matches to avoid unnecessary reload loop if we were polling?
+                        // The original code: img.src = data.url + "?t=" + new Date().getTime();
+                        // This unconditionally reloads the image every 30s. This causes flickering.
+                        
+                        // Let's improve this: only reload if filename changed OR force is true.
+                        
+                        const currentSrc = img.src.split('?')[0]; // Remove existing timestamp
+                        
+                        if (force || currentSrc !== data.url) {
+                             img.src = data.url + "?t=" + new Date().getTime();
+                             name.innerText = data.filename;
+                             img.style.display = 'block';
+                        }
                     } else {
                         img.style.display = 'none';
                         name.innerText = "No image found";
