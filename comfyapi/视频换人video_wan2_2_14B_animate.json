@@ -70,7 +70,7 @@
   "18": {
     "inputs": {
       "lora_name": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
-      "strength_model": 0.8,
+      "strength_model": 1,
       "model": [
         "20",
         0
@@ -108,7 +108,7 @@
   },
   "21": {
     "inputs": {
-      "text": "Full-body portrait, chibi, super deformed, 2 heads tall, big head small body, flat chest, child body, cute, anime style, short legs, toddler proportions",
+      "text": "The character is dancing in the room, Full-body portrait, chibi, super deformed, 2 heads tall, big head small body, flat chest, child body, cute, anime style, short legs, toddler proportions",
       "clip": [
         "2",
         0
@@ -147,7 +147,7 @@
   "99": {
     "inputs": {
       "lora_name": "WanAnimate_relight_lora_fp16.safetensors",
-      "strength_model": 0.8,
+      "strength_model": 1,
       "model": [
         "18",
         0
@@ -182,8 +182,8 @@
   },
   "101": {
     "inputs": {
-      "detect_hand": "enable",
-      "detect_body": "enable",
+      "detect_hand": "disable",
+      "detect_body": "disable",
       "detect_face": "disable",
       "resolution": [
         "158",
@@ -204,7 +204,7 @@
   },
   "107": {
     "inputs": {
-      "keep_model_loaded": false,
+      "keep_model_loaded": true,
       "individual_objects": false,
       "sam2_model": [
         "108",
@@ -269,7 +269,7 @@
   },
   "159": {
     "inputs": {
-      "value": 480
+      "value": 640
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -278,7 +278,7 @@
   },
   "160": {
     "inputs": {
-      "value": 848
+      "value": 640
     },
     "class_type": "PrimitiveInt",
     "_meta": {
@@ -331,7 +331,7 @@
   },
   "274": {
     "inputs": {
-      "expand": 50,
+      "expand": 10,
       "tapered_corners": true,
       "mask": [
         "107",
@@ -417,7 +417,7 @@
         "160",
         0
       ],
-      "length": 60,
+      "length": 77,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": 0,
@@ -482,7 +482,7 @@
   },
   "232:15": {
     "inputs": {
-      "fps": 20,
+      "fps": 16,
       "images": [
         "232:230",
         0
@@ -504,7 +504,7 @@
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 0.25,
+      "denoise": 0.4,
       "model": [
         "60",
         0
