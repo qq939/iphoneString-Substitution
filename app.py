@@ -1152,15 +1152,11 @@ def upload_and_cut():
     
     try:
         # Preprocessing: Resize and set FPS
-        # Target: Height 848, FPS 30
-        
-        # Resize to 640x640, 20fps
         resized_video_path = os.path.join(UPLOAD_FOLDER, f"resized_{group_id}.mp4")
         try:
-             ffmpeg_utils.resize_video(file_path, resized_video_path, width=640, height=640)
+             ffmpeg_utils.resize_video(file_path, resized_video_path)
         except Exception as e:
              print(f"FFmpeg resize failed: {e}. Falling back to original size.")
-             # Just copy if resize fails
              shutil.copy(file_path, resized_video_path)
         
         info = ffmpeg_utils.get_video_info(resized_video_path)

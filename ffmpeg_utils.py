@@ -61,11 +61,10 @@ def extract_audio(video_path, output_path):
     ]
     run_command(cmd)
 
-def resize_video(input_path, output_path, width=640, height=640, fps=20):
-    """Resize video to specific dimensions (default 640x640, 20fps)."""
-    # Scale filter: strictly 640x640 as requested
-    scale_filter = f"scale={width}:{height}"
-    
+def resize_video(input_path, output_path, max_size=800, fps=20):
+    """Resize video with aspect ratio preserved and max side limited."""
+    scale_filter = f"scale='if(gt(iw,ih),{max_size},-2)':'if(gt(iw,ih),-2,{max_size})'"
+ 
     cmd = [
         'ffmpeg', '-y',
         '-i', input_path,
