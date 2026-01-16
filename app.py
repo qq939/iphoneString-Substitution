@@ -11,22 +11,67 @@ import shutil
 import json
 from datetime import datetime
 from PIL import Image
+# MoviePy Import Logic with detailed logging
 try:
+    print("Attempting to import moviepy...")
     from moviepy.editor import VideoFileClip, concatenate_videoclips, AudioFileClip, afx, ImageClip
     import moviepy.video.fx.all as vfx
-except ImportError:
-    # MoviePy 2.0+ compatibility
-    from moviepy import VideoFileClip, concatenate_videoclips, AudioFileClip, ImageClip
-    import moviepy.audio.fx as audio_fx
-    import moviepy.video.fx as vfx # Assuming 2.0 structure
+    print(f"Successfully imported moviepy.video.fx.all as vfx. Has resize: {hasattr(vfx, 'resize')}")
+except ImportError as e:
+    print(f"ImportError during standard moviepy import: {e}")
+    # MoviePy 2.0+ compatibility or partial install
+    try:
+        from moviepy import VideoFileClip, concatenate_videoclips, AudioFileClip, ImageClip
+        import moviepy.audio.fx as audio_fx
+        import moviepy.video.fx as vfx # Assuming 2.0 structure
+        print("Imported moviepy using fallback/2.0 structure")
+    except ImportError as e2:
+        print(f"Critical Error: Failed to import moviepy: {e2}")
+        raise e2
     
     class AFXShim:
         def audio_loop(self, clip, duration=None):
             return clip.with_effects([audio_fx.AudioLoop(duration=duration)])
             
     afx = AFXShim()
+
+# Explicitly try to import resize function as a standalone fallback
+try:
+    from moviepy.video.fx.resize import resize as explicit_resize
+    print("Successfully imported explicit_resize from moviepy.video.fx.resize")
+except ImportError:
+    try:
+        from moviepy.video.fx.all import resize as explicit_resize
+        print("Successfully imported explicit_resize from moviepy.video.fx.all")
+    except ImportError:
+        explicit_resize = None
+        print("Failed to import explicit_resize")
+
 import comfy_utils
 import obs_utils
+import cv2
+import numpy as np
+
+def opencv_resize_clip(clip, target_height):
+    """
+    Resizes a MoviePy clip using OpenCV.
+    Maintains aspect ratio and ensures dimensions are even.
+    """
+    w, h = clip.size
+    target_width = int(w * target_height / h)
+    
+    # Ensure even dimensions for ffmpeg compatibility
+    if target_width % 2 != 0:
+        target_width += 1
+    if target_height % 2 != 0:
+        target_height += 1
+        
+    def resize_frame(image):
+        # OpenCV expects (width, height) for dsize
+        return cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_AREA)
+        
+    return clip.fl_image(resize_frame)
+
 
 # Add local bin directory to PATH for ffmpeg/ffprobe
 local_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
@@ -1226,23 +1271,12 @@ def upload_image_swap():
         # Note: ImageClip resize
         clip = ImageClip(image_path).set_duration(0.5).set_fps(30)
         
-        # Resize
-        # If width/height are odd, ffmpeg might complain. Ensure even dimensions.
-        # But resize(height=848) handles aspect ratio.
-        # clip_resized = clip.resize(height=848)
-        # Use vfx.resize explicitly to avoid attribute error
+        # Resize using OpenCV as requested by user
         try:
-            clip_resized = vfx.resize(clip, height=848)
-        except AttributeError:
-            # Fallback for some versions where vfx might be different or clip has method
-            if hasattr(clip, 'resize'):
-                clip_resized = clip.resize(height=848)
-            else:
-                # Try finding resize in vfx if it's not directly exposed
-                if hasattr(vfx, 'resize'):
-                    clip_resized = vfx.resize(clip, height=848)
-                else:
-                    raise Exception("Cannot find resize function in moviepy")
+             clip_resized = opencv_resize_clip(clip, target_height=848)
+        except Exception as e:
+             print(f"OpenCV resize failed: {e}. Falling back to original size.")
+             clip_resized = clip
         
         # Write temp video
         segment_filename = f"segment_{group_id}_0.mp4"
@@ -1420,15 +1454,10 @@ def upload_and_cut():
         # Resize height to 848
         # clip_resized = clip.resize(height=848)
         try:
-            clip_resized = vfx.resize(clip, height=848)
-        except AttributeError:
-            if hasattr(clip, 'resize'):
-                clip_resized = clip.resize(height=848)
-            else:
-                if hasattr(vfx, 'resize'):
-                    clip_resized = vfx.resize(clip, height=848)
-                else:
-                    raise Exception("Cannot find resize function in moviepy")
+             clip_resized = opencv_resize_clip(clip, target_height=848)
+        except Exception as e:
+             print(f"OpenCV resize failed: {e}. Falling back to original size.")
+             clip_resized = clip
         
         duration = clip.duration
         fps = 30 # Target FPS

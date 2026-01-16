@@ -28,21 +28,38 @@ class TestMoviePyResize(unittest.TestCase):
     def test_resize_logic(self):
         clip = VideoFileClip(self.test_file)
         
+        # Simulate import of explicit_resize
         try:
-            # Replicate the logic in app.py
+            from moviepy.video.fx.resize import resize as explicit_resize
+        except ImportError:
             try:
-                clip_resized = vfx.resize(clip, height=50)
-                print("Resized using vfx.resize")
+                from moviepy.video.fx.all import resize as explicit_resize
+            except ImportError:
+                explicit_resize = None
+
+        try:
+            # Replicate the UPDATED logic in app.py
+            try:
+                if hasattr(vfx, 'resize'):
+                    clip_resized = vfx.resize(clip, height=50)
+                    print("Resized using vfx.resize")
+                elif hasattr(clip, 'resize'):
+                    clip_resized = clip.resize(height=50)
+                    print("Resized using clip.resize")
+                elif explicit_resize:
+                    clip_resized = explicit_resize(clip, height=50)
+                    print("Resized using explicit_resize")
+                else:
+                    raise Exception("Cannot find resize function")
             except AttributeError:
                 if hasattr(clip, 'resize'):
                     clip_resized = clip.resize(height=50)
-                    print("Resized using clip.resize")
+                    print("Resized using clip.resize (fallback)")
+                elif explicit_resize:
+                    clip_resized = explicit_resize(clip, height=50)
+                    print("Resized using explicit_resize (fallback)")
                 else:
-                    if hasattr(vfx, 'resize'):
-                        clip_resized = vfx.resize(clip, height=50)
-                        print("Resized using vfx.resize (fallback)")
-                    else:
-                        raise Exception("Cannot find resize function in moviepy")
+                    raise Exception("AttributeError during resize and no fallback available")
             
             self.assertIsNotNone(clip_resized)
             self.assertEqual(clip_resized.h, 50)
