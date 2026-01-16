@@ -7,13 +7,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <button id="refresh-btn" onclick="location.reload()" title="Refresh Page">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M23 4v6h-6"></path>
-            <path d="M1 20v-6h6"></path>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-    </button>
     <div class="grid-container">
         <!-- 格子 1 -->
         <div class="grid-item item-1">
@@ -85,7 +78,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2>当前角色 <span style="cursor: pointer; margin-left: 5px;" onclick="refreshCharacter()">🔄</span></h2>
+                <h2>当前角色 <button type="button" class="inline-refresh-btn" onclick="refreshCharacter()" aria-label="刷新当前角色"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
                 <div id="outputContainer" style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <!-- Character Preview (Initially Hidden) -->
                     <img id="charPreview" src="http://obs.dimond.top/character.png" 
@@ -124,7 +117,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestVideo(true)">🔄</span></h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a> <button type="button" class="inline-refresh-btn" onclick="updateLatestVideo(true)" aria-label="刷新当前视频"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <video id="latestVideoPreview" autoplay muted loop controls style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #00ff00;">
                         Your browser does not support the video tag.
@@ -172,7 +165,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前音频</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestAudio(true)">🔄</span></h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前音频</a> <button type="button" class="inline-refresh-btn" onclick="updateLatestAudio(true)" aria-label="刷新当前音频"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <audio id="latestAudioPreview" controls style="width: 90%;">
                         Your browser does not support the audio element.
@@ -209,7 +202,7 @@
                 <button class="control-btn control-btn-back" onclick="exitFullscreen(this.closest('.grid-item'))">[BACK]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前图片</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestImage(true)">🔄</span></h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前图片</a> <button type="button" class="inline-refresh-btn" onclick="updateLatestImage(true)" aria-label="刷新当前图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <img id="latestImagePreview" src="" style="max-width: 90%; max-height: 90%; border: 1px solid #00ff00; object-fit: contain; display: none;" 
                          onload="this.style.display='block'" 

@@ -1,6 +1,6 @@
 flask
 requests
-moviepy<2.0
+moviepy
 pytest
 websocket-client
 pydub

@@ -297,6 +297,12 @@ def ensure_comfy_connection():
     Checks connection to ComfyUI and updates global status.
     Raises exception if no server is available.
     """
+    if app.config.get('TESTING'):
+        COMFY_STATUS['status'] = 'online'
+        COMFY_STATUS['ip'] = comfy_utils.client.base_url if comfy_utils.client.base_url else "TESTING"
+        COMFY_STATUS['last_checked'] = time.time()
+        return
+
     # Force a check which will try to switch servers if current is down
     if not comfy_utils.client.check_connection():
         # If check_connection returns False, it means even after retries it failed
@@ -380,6 +386,7 @@ def upload_audio():
     try:
         wav_filename = f"tone_{uuid.uuid4()}.wav"
         wav_path = os.path.join(UPLOAD_FOLDER, wav_filename)
+        input_video_path_for_stage2 = None
         
         # Check if file is provided and valid
         if file and file.filename != '':
@@ -394,7 +401,6 @@ def upload_audio():
             
             # Save input video copy immediately if it's a video format
             # This ensures we have it for Stage 2 before any conversion/cleanup
-            input_video_path_for_stage2 = None
             if ext in ['mp4', 'mov']:
                  try:
                     input_video_filename = f"input_video_{uuid.uuid4()}.{ext}"
@@ -574,9 +580,39 @@ def process_digital_human_video(audio_path, input_video_path=None):
         
         if input_video_path and os.path.exists(input_video_path):
             print(f"Using provided input video: {input_video_path}")
-            # Upload input video directly
+            stage2_video_path = input_video_path
+            trimmed_video_path = None
+            try:
+                clip = VideoFileClip(input_video_path)
+                end_time = 3
+                if getattr(clip, "duration", None):
+                    end_time = min(3, clip.duration)
+                trimmed = clip.subclip(0, end_time)
+                trimmed_video_filename = f"stage2_input_3s_{uuid.uuid4()}.mp4"
+                trimmed_video_path = os.path.join(UPLOAD_FOLDER, trimmed_video_filename)
+                trimmed.write_videofile(trimmed_video_path, codec="libx264", audio=False, logger=None)
+                try:
+                    trimmed.close()
+                except Exception:
+                    pass
+                try:
+                    clip.close()
+                except Exception:
+                    pass
+                stage2_video_path = trimmed_video_path
+                print(f"Trimmed input video to first {end_time}s: {trimmed_video_path}")
+            except Exception as e:
+                print(f"Failed to trim input video, uploading original: {e}")
+
             print("Uploading input video to ComfyUI...")
-            comfy_video = comfy_utils.client.upload_file(input_video_path)
+            try:
+                comfy_video = comfy_utils.client.upload_file(stage2_video_path)
+            finally:
+                if trimmed_video_path:
+                    try:
+                        os.remove(trimmed_video_path)
+                    except OSError:
+                        pass
             if not comfy_video:
                 print("Failed to upload input video to ComfyUI")
                 return

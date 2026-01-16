@@ -15,15 +15,10 @@ def test_upload_and_cut_success(client):
     video_content = b'fake video content'
     filename = 'test_video.mp4'
     
-    # We need to mock:
-    # 1. requests.get (for character download) - needs context manager support
-    # 2. VideoFileClip
-    # 3. comfy_utils.submit_job
-    # 4. obs_utils (though not called in the sync part of upload_and_cut, only in async monitor, but let's be safe)
-    
     with patch('app.requests.get') as mock_get, \
          patch('app.VideoFileClip') as MockVideoFileClip, \
-         patch('app.comfy_utils.submit_job') as mock_submit_job:
+         patch('app.comfy_utils.client.upload_file') as mock_upload_file, \
+         patch('app.comfy_utils.queue_workflow_template') as mock_queue_workflow:
          
         # Setup requests.get mock for context manager
         mock_response = MagicMock()
@@ -35,13 +30,18 @@ def test_upload_and_cut_success(client):
         
         # Setup VideoFileClip
         mock_clip = MagicMock()
-        mock_clip.duration = 4 # 2 segments
+        mock_clip.duration = 4
+        mock_clip.audio = None
+        mock_clip.resize.return_value = mock_clip
         mock_subclip = MagicMock()
-        mock_clip.subclipped.return_value = mock_subclip
+        mock_clip.subclip.return_value = mock_subclip
         MockVideoFileClip.return_value = mock_clip
         
-        # Setup submit_job
-        mock_submit_job.return_value = ("prompt_123", None)
+        mock_upload_file.side_effect = [
+            {'name': 'seg_0.mp4'},
+            {'name': 'character.png'}
+        ]
+        mock_queue_workflow.return_value = ("prompt_123", None)
         
         # Make request
         data = {
@@ -62,8 +62,5 @@ def test_upload_and_cut_success(client):
         args, _ = mock_get.call_args
         assert args[0] == "http://obs.dimond.top/character.png"
         
-        # Verify submit_job was called with the downloaded character path
-        # The path should be in UPLOAD_FOLDER and start with character_for_
-        submit_args, _ = mock_submit_job.call_args
-        char_path_arg = submit_args[0]
-        assert "character_for_test_video.mp4" in char_path_arg
+        assert mock_upload_file.call_count == 2
+        assert mock_queue_workflow.call_count == 1

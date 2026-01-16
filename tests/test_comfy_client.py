@@ -16,7 +16,11 @@ class TestComfyUIClient(unittest.TestCase):
     def test_check_connection(self, mock_get):
         mock_get.return_value.status_code = 200
         self.assertTrue(self.client.check_connection())
-        mock_get.assert_called_with("http://dimond.top:7860/object_info", timeout=5)
+        mock_get.assert_called_with(
+            "http://dimond.top:7860/object_info",
+            timeout=5,
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
 
     @patch('urllib.request.urlopen')
     def test_queue_prompt(self, mock_urlopen):

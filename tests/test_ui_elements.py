@@ -8,13 +8,18 @@ class TestUIElements(unittest.TestCase):
         self.index_path = os.path.join(self.base_dir, 'templates', 'index.html')
         self.css_path = os.path.join(self.base_dir, 'static', 'css', 'style.css')
 
-    def test_refresh_button_exists(self):
-        """Verify that the refresh button with SVG icon exists in index.html"""
+    def test_refresh_buttons_use_svg(self):
+        """Verify that panel refresh buttons use SVG icons and no emoji remains"""
         with open(self.index_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            self.assertIn('id="refresh-btn"', content)
-            self.assertIn('<svg', content)
-            self.assertIn('onclick="location.reload()"', content)
+            self.assertNotIn('🔄', content)
+            self.assertIn('class="inline-refresh-btn"', content)
+            self.assertIn('onclick="refreshCharacter()"', content)
+            self.assertIn('onclick="updateLatestVideo(true)"', content)
+            self.assertIn('onclick="updateLatestAudio(true)"', content)
+            self.assertIn('onclick="updateLatestImage(true)"', content)
+            self.assertGreaterEqual(content.count('class="inline-refresh-btn"'), 4)
+            self.assertGreaterEqual(content.count('<svg'), 4)
 
     def test_css_rules_exist(self):
         """Verify that new CSS rules for transparent controls exist"""
@@ -28,7 +33,8 @@ class TestUIElements(unittest.TestCase):
             self.assertIn('input[type="radio"]', content)
             self.assertIn('input[type="checkbox"]', content)
             self.assertIn('appearance: none', content)
-            self.assertIn('#refresh-btn', content)
+            self.assertIn('.inline-refresh-btn', content)
+            self.assertNotIn('#refresh-btn', content)
 
 if __name__ == '__main__':
     unittest.main()

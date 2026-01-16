@@ -24,14 +24,6 @@ def test_async_process_flow(client):
     video_content = b'fake video content'
     filename = 'test_video.mp4'
     
-    # We need to mock:
-    # 1. VideoFileClip (moviepy)
-    # 2. comfy_utils.submit_job
-    # 3. comfy_utils.check_status
-    # 4. comfy_utils.download_result
-    # 5. obs_utils.upload_file
-    # 6. moviepy.concatenate_videoclips
-    
     with patch('app.VideoFileClip') as MockVideoFileClip, \
          patch('app.comfy_utils') as mock_comfy, \
          patch('app.obs_utils') as mock_obs, \
@@ -40,14 +32,20 @@ def test_async_process_flow(client):
          
         # Setup VideoFileClip mock
         mock_clip = MagicMock()
-        mock_clip.duration = 4 # Should result in 2 segments (3s each)
+        mock_clip.duration = 8
+        mock_clip.audio = None
+        mock_clip.resize.return_value = mock_clip
         mock_subclip = MagicMock()
-        mock_clip.subclipped.return_value = mock_subclip
+        mock_clip.subclip.return_value = mock_subclip
         MockVideoFileClip.return_value = mock_clip
         
-        # Setup submit_job mock
-        # Returns (prompt_id, error)
-        mock_comfy.submit_job.side_effect = [("task_1", None), ("task_2", None)]
+        mock_comfy.client.upload_file.side_effect = [
+            {'name': 'seg_0.mp4'},
+            {'name': 'character.png'},
+            {'name': 'seg_1.mp4'},
+            {'name': 'character.png'}
+        ]
+        mock_comfy.queue_workflow_template.side_effect = [("task_1", None), ("task_2", None)]
         
         # Setup check_status mock
         # We need to handle multiple calls.
@@ -79,6 +77,7 @@ def test_async_process_flow(client):
         
         # Setup concat mock
         mock_final_clip = MagicMock()
+        mock_final_clip.audio = None
         mock_concat.return_value = mock_final_clip
         
         # Mock requests.get for character download
@@ -126,6 +125,6 @@ def test_async_process_flow(client):
         assert final_status['final_url'] == "http://obs/final.mp4"
         
         # Verify calls
-        assert mock_comfy.submit_job.call_count == 2
+        assert mock_comfy.queue_workflow_template.call_count == 2
         assert mock_concat.called
         assert mock_obs.upload_file.called
