@@ -42,5 +42,18 @@ class TestUIElements(unittest.TestCase):
             self.assertIn('.inline-refresh-btn', content)
             self.assertNotIn('#refresh-btn', content)
 
+    def test_i2v_sectors_exist(self):
+        with open(self.index_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            self.assertIn('图生视频 11', content)
+            self.assertIn('图生视频 12', content)
+            self.assertIn('图生视频 13', content)
+            self.assertIn('图生视频 14', content)
+            self.assertIn('id="i2vText11"', content)
+            self.assertIn('id="i2vText12"', content)
+            self.assertIn('id="i2vText13"', content)
+            self.assertIn('id="i2vText14"', content)
+            self.assertIn('id="i2vSubmitBtn"', content)
+
 if __name__ == '__main__':
     unittest.main()

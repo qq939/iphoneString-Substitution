@@ -175,8 +175,45 @@
             </div>
         </div>
 
-        <!-- 其他格子占位 -->
-        {% for i in range(11, 17) %}
+        <div class="grid-item item-11">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>图生视频 11</h2>
+                <input type="text" id="i2vText11" class="upload-input" placeholder="输入图生视频脚本">
+            </div>
+        </div>
+        <div class="grid-item item-12">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>图生视频 12</h2>
+                <input type="text" id="i2vText12" class="upload-input" placeholder="输入图生视频脚本">
+            </div>
+        </div>
+        <div class="grid-item item-13">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>图生视频 13</h2>
+                <input type="text" id="i2vText13" class="upload-input" placeholder="输入图生视频脚本">
+            </div>
+        </div>
+        <div class="grid-item item-14">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>图生视频 14</h2>
+                <input type="text" id="i2vText14" class="upload-input" placeholder="输入图生视频脚本">
+                <button type="button" id="i2vSubmitBtn" class="action-btn" style="margin-top: 5px;">SUBMIT</button>
+                <div id="i2vStatus" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+            </div>
+        </div>
+        {% for i in range(15, 17) %}
         <div class="grid-item item-{{ i }}">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
@@ -500,6 +537,53 @@
         // Check for latest audio every 30 seconds
         updateLatestAudio();
         setInterval(updateLatestAudio, 30000);
+
+        document.getElementById('i2vSubmitBtn').onclick = async function() {
+            const statusDiv = document.getElementById('i2vStatus');
+            const t11 = document.getElementById('i2vText11').value;
+            const t12 = document.getElementById('i2vText12').value;
+            const t13 = document.getElementById('i2vText13').value;
+            const t14 = document.getElementById('i2vText14').value;
+            statusDiv.innerText = 'SUBMITTING...';
+            this.disabled = true;
+            try {
+                const res = await fetch('/generate_i2v_group', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({texts: [t11, t12, t13, t14]})
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown');
+                    this.disabled = false;
+                    return;
+                }
+                statusDiv.innerText = 'PROCESSING...';
+                const groupId = data.group_id;
+                const poll = setInterval(async () => {
+                    try {
+                        const r = await fetch(`/check_group_status/${groupId}`);
+                        const s = await r.json();
+                        if (s.status === 'processing') {
+                            statusDiv.innerText = `PROCESSING... [${s.progress}]`;
+                        } else {
+                            clearInterval(poll);
+                            if (s.status === 'completed') {
+                                statusDiv.innerText = 'COMPLETED.';
+                                updateLatestVideo(true);
+                            } else {
+                                statusDiv.innerText = 'FAILED: ' + (s.error || 'Unknown');
+                            }
+                            document.getElementById('i2vSubmitBtn').disabled = false;
+                        }
+                    } catch (e) {
+                    }
+                }, 2000);
+            } catch (e) {
+                statusDiv.innerText = 'SYSTEM FAILURE: ' + e.message;
+                this.disabled = false;
+            }
+        };
 
     </script>
 </body>

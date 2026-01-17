@@ -142,6 +142,13 @@ def modify_extend_video_workflow(workflow, video_filename, audio_filename):
     
     return workflow
 
+def modify_i2v_workflow(workflow, image_filename, prompt_text):
+    if "97" in workflow and "inputs" in workflow["97"]:
+        workflow["97"]["inputs"]["image"] = image_filename
+    if "93" in workflow and "inputs" in workflow["93"]:
+        workflow["93"]["inputs"]["text"] = prompt_text
+    return workflow
+
 def generate_1s_video(image_path, output_path):
     """
     Generates a 1-second 25fps video from an image using ffmpeg.
@@ -1119,6 +1126,67 @@ def monitor_group_task(group_id):
             
         time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
 
+def monitor_i2v_group(group_id):
+    group_data = TASKS_STORE.get(group_id)
+    if not group_data:
+        return
+    while True:
+        now = time.time()
+        created_at = group_data.get('created_at')
+        if created_at is not None and now - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
+            group_data['status'] = 'failed'
+            break
+        tasks = group_data.get('tasks', [])
+        all_done = True
+        for task in tasks:
+            if task['status'] in ['completed', 'failed']:
+                continue
+            all_done = False
+            try:
+                status, result = comfy_utils.check_status(task['task_id'], task.get('server'))
+                if status == 'SUCCEEDED':
+                    if isinstance(result, dict):
+                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER, task.get('server'))
+                        if local_path:
+                            task['result_path'] = local_path
+                            task['status'] = 'completed'
+                        else:
+                            task['status'] = 'failed'
+                    else:
+                        task['status'] = 'failed'
+                elif status == 'FAILED':
+                    task['status'] = 'failed'
+            except Exception:
+                pass
+        if all_done:
+            video_paths = []
+            for t in sorted(tasks, key=lambda x: x['segment_index']):
+                if t.get('result_path') and os.path.exists(t['result_path']):
+                    video_paths.append(t['result_path'])
+            if video_paths:
+                output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
+                output_path = os.path.join(UPLOAD_FOLDER, output_filename)
+                temp_concat_path = os.path.join(UPLOAD_FOLDER, f"temp_i2v_{group_id}.mp4")
+                try:
+                    ffmpeg_utils.concatenate_videos(video_paths, temp_concat_path)
+                    if os.path.exists(temp_concat_path):
+                        shutil.move(temp_concat_path, output_path)
+                    obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
+                    if obs_url:
+                        group_data['final_url'] = obs_url
+                        group_data['status'] = 'completed'
+                    else:
+                        group_data['status'] = 'failed'
+                        group_data['error'] = 'OBS upload failed'
+                except Exception as e:
+                    group_data['status'] = 'failed'
+                    group_data['error'] = str(e)
+            else:
+                group_data['status'] = 'failed'
+                group_data['error'] = 'No clips to concatenate'
+            break
+        time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
+
 @app.route('/upload_and_cut', methods=['POST'])
 def upload_and_cut():
     # Ensure ComfyUI connection before starting
@@ -1300,6 +1368,73 @@ def check_group_status(group_id):
         'progress': f"{len([t for t in group_data['tasks'] if t['status'] == 'completed'])}/{len(group_data['tasks'])}"
     }
     return jsonify(response)
+
+@app.route('/generate_i2v_group', methods=['POST'])
+def generate_i2v_group():
+    try:
+        ensure_comfy_connection()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+    data = request.get_json(silent=True) or {}
+    texts = data.get('texts') or []
+    if not isinstance(texts, list) or len(texts) < 4:
+        return jsonify({'error': 'texts must be a list of length 4'}), 400
+    character_url = "http://obs.dimond.top/character.png"
+    character_path = os.path.join(UPLOAD_FOLDER, f"i2v_character_{uuid.uuid4()}.png")
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        with requests.get(character_url, stream=True, timeout=30, headers=headers) as r:
+            if r.status_code != 200:
+                return jsonify({'error': f'Failed to download character: {r.status_code}'}), 500
+            with open(character_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    try:
+        upload_res = comfy_utils.client.upload_file(character_path)
+        if not upload_res or 'name' not in upload_res:
+            return jsonify({'error': 'Failed to upload character to ComfyUI'}), 500
+        image_name = upload_res['name']
+    finally:
+        if os.path.exists(character_path):
+            os.remove(character_path)
+    workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '图生视频video_wan2_2_14B_i2v.json')
+    if not os.path.exists(workflow_path):
+        return jsonify({'error': 'Workflow file not found'}), 500
+    group_id = str(uuid.uuid4())
+    TASKS_STORE[group_id] = {
+        'status': 'processing',
+        'tasks': [],
+        'created_at': time.time(),
+        'workflow_type': 'i2v',
+        'audio_path': None,
+    }
+    for idx, text in enumerate(texts):
+        if not isinstance(text, str):
+            continue
+        prompt_text = text.strip()
+        if not prompt_text:
+            continue
+        with open(workflow_path, 'r', encoding='utf-8') as f:
+            workflow = json.load(f)
+        workflow = modify_i2v_workflow(workflow, image_name, prompt_text)
+        try:
+            prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
+        except Exception as e:
+            continue
+        if prompt_id:
+            TASKS_STORE[group_id]['tasks'].append({
+                'task_id': prompt_id,
+                'server': server_address,
+                'status': 'pending',
+                'segment_index': idx,
+                'result_path': None,
+            })
+    thread = threading.Thread(target=monitor_i2v_group, args=(group_id,))
+    thread.daemon = True
+    thread.start()
+    return jsonify({'status': 'processing', 'group_id': group_id})
 
 def get_latest_file_from_obs(suffix):
     """
