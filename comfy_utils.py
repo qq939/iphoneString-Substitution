@@ -123,7 +123,7 @@ class ComfyUIClient:
             with urllib.request.urlopen(req, timeout=10) as response:
                 response_data = json.loads(response.read())
                 if 'prompt_id' in response_data:
-                    return response_data['prompt_id']
+                    return response_data['prompt_id'], self.server_address
         except Exception as e:
             if hasattr(e, 'read'):
                 try:
@@ -134,22 +134,23 @@ class ComfyUIClient:
             logger.warning(f"Failed to queue prompt: {e}")
             raise # Propagate exception to caller
             
-        return None
+        return None, None
 
-    def get_history(self, prompt_id):
+    def get_history(self, prompt_id, server_address=None):
         """
         Queries history for the given prompt_id.
         """
         try:
-            url = f"{self.base_url}/history/{prompt_id}"
+            base_url = f"http://{server_address}" if server_address else self.base_url
+            url = f"{base_url}/history/{prompt_id}"
             logger.info(f"Fetching ComfyUI history: {url}")
             with urllib.request.urlopen(url, timeout=10) as response:
                 data = json.loads(response.read())
                 return data
         except Exception as e:
-            logger.warning(f"Failed to get history for {prompt_id}: {e}")
+            logger.warning(f"Failed to get history for {prompt_id} from {server_address or self.base_url}: {e}")
             pass
-        return {}
+        return None
 
     def upload_file(self, file_path, subfolder="", overwrite=False):
         """
@@ -178,7 +179,7 @@ class ComfyUIClient:
             
         return None
     
-    def download_output_file(self, filename, subfolder="", file_type="output", output_dir="."):
+    def download_output_file(self, filename, subfolder="", file_type="output", output_dir=".", server_address=None):
         """
         Downloads a file from ComfyUI output.
         """
@@ -189,7 +190,8 @@ class ComfyUIClient:
                 "type": file_type
             }
             query_string = urllib.parse.urlencode(params)
-            url = f"{self.base_url}/view?{query_string}"
+            base_url = f"http://{server_address}" if server_address else self.base_url
+            url = f"{base_url}/view?{query_string}"
             
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
@@ -203,25 +205,29 @@ class ComfyUIClient:
             logger.error(f"Download failed: {e}")
             raise # Propagate exception
         
-    def get_queue(self):
+    def get_queue(self, server_address=None):
         """
         Gets the current queue status.
         """
         try:
-            url = f"{self.base_url}/queue"
+            base_url = f"http://{server_address}" if server_address else self.base_url
+            url = f"{base_url}/queue"
             with urllib.request.urlopen(url, timeout=10) as response:
                 data = json.loads(response.read())
                 return data
         except Exception as e:
-            logger.error(f"Get queue failed: {e}")
-            return {}
+            logger.error(f"Get queue failed from {server_address or self.base_url}: {e}")
+            return None
             
-    def is_task_running(self, prompt_id):
+    def is_task_running(self, prompt_id, server_address=None):
         """
         Checks if a task is currently running or pending.
         """
-        queue_data = self.get_queue()
+        queue_data = self.get_queue(server_address)
         
+        if queue_data is None:
+            return "UNKNOWN"
+            
         # Check pending
         for task in queue_data.get('queue_pending', []):
             if len(task) > 1 and task[1] == prompt_id:
@@ -294,7 +300,7 @@ def submit_job_with_urls(character_url, video_url):
         return submit_job(char_path, video_path)
     except Exception as e:
         logger.error(f"Submit job with URLs failed: {e}")
-        return None, str(e)
+        return None, None, str(e)
     finally:
         shutil.rmtree(temp_dir)
 
@@ -304,12 +310,12 @@ def submit_job(character_path, video_path):
         video_res = client.upload_file(video_path)
         
         if not char_res or not video_res:
-            return None, "Failed to upload files"
+            return None, None, "Failed to upload files"
             
         return queue_workflow_template(char_res.get('name'), video_res.get('name'))
     except Exception as e:
         logger.error(f"Submit job error: {e}")
-        return None, str(e)
+        return None, None, str(e)
 
 def cancel_job(prompt_id):
     return client.cancel_task(prompt_id)
@@ -347,7 +353,7 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
             workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '视频换人video_wan2_2_14B_animate.json')
             
         if not os.path.exists(workflow_path):
-            return None, f"Workflow file not found: {workflow_path}"
+            return None, None, f"Workflow file not found: {workflow_path}"
             
         with open(workflow_path, 'r', encoding='utf-8') as f:
             workflow = json.load(f)
@@ -364,8 +370,8 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
             if node_id in workflow and "inputs" in workflow[node_id] and "seed" in workflow[node_id]["inputs"]:
                 workflow[node_id]["inputs"]["seed"] = seed
             
-        prompt_id = client.queue_prompt(workflow)
-        return (prompt_id, None) if prompt_id else (None, "Failed to queue prompt")
+        prompt_id, server_address = client.queue_prompt(workflow)
+        return (prompt_id, server_address, None) if prompt_id else (None, None, "Failed to queue prompt")
     except Exception as e:
         error_msg = str(e)
         if hasattr(e, 'read'):
@@ -375,75 +381,101 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
             except:
                 pass
         logger.error(f"Queue workflow template error: {error_msg}")
-        return None, error_msg
+        return None, None, error_msg
 
-def check_status(prompt_id):
-    try:
-        history = client.get_history(prompt_id)
-        if prompt_id in history:
-            # Log detailed response content as requested
-            logger.info(f"Task {prompt_id} completed. History data: {json.dumps(history[prompt_id], indent=2, ensure_ascii=False)}")
+def check_status(prompt_id, server_address=None):
+    # If specific server is known, prioritize it. Otherwise check all.
+    servers_to_check = [server_address] if server_address else SERVER_LIST
+    
+    any_network_error = False
+    
+    for server in servers_to_check:
+        try:
+            # 1. Check history
+            history = client.get_history(prompt_id, server)
+            if history is None:
+                any_network_error = True
+                # Continue to next server or try is_task_running if single server?
+                # If single server and network error, we can't do much.
+                # If checking multiple, maybe it's on another server.
+                # Let's try is_task_running on this server just in case history endpoint is the only one broken (unlikely)
+                # But proceed to check queue.
             
-            outputs = history[prompt_id].get('outputs', {})
-            
-            # Collect all outputs to find the best one
-            all_files = []
-            for node_id, node_output in outputs.items():
-                for type_key in ['gifs', 'videos', 'images', 'audio']:
-                    if type_key in node_output:
-                        for file_info in node_output[type_key]:
-                            all_files.append({
-                                'node_id': node_id,
-                                'type_key': type_key,
-                                'file_info': file_info
-                            })
-            
-            if all_files:
-                # Sort outputs to prioritize video > image > audio
-                # And prioritize specific nodes if needed (e.g. Node 15 for VHS_VideoCombine)
-                def sort_key(item):
-                    # Lower score is better
-                    type_priority = {'videos': 0, 'gifs': 1, 'images': 2, 'audio': 3}
+            elif prompt_id in history:
+                # Found!
+                # Log detailed response content as requested
+                logger.info(f"Task {prompt_id} completed on {server}. History data: {json.dumps(history[prompt_id], indent=2, ensure_ascii=False)}")
+                
+                outputs = history[prompt_id].get('outputs', {})
+                
+                # Collect all outputs to find the best one
+                all_files = []
+                for node_id, node_output in outputs.items():
+                    for type_key in ['gifs', 'videos', 'images', 'audio']:
+                        if type_key in node_output:
+                            for file_info in node_output[type_key]:
+                                all_files.append({
+                                    'node_id': node_id,
+                                    'type_key': type_key,
+                                    'file_info': file_info
+                                })
+                
+                if all_files:
+                    # Sort outputs to prioritize video > image > audio
+                    def sort_key(item):
+                        type_priority = {'videos': 0, 'gifs': 1, 'images': 2, 'audio': 3}
+                        node_priority = 0 if item['node_id'] == '15' else 1
+                        return (node_priority, type_priority.get(item['type_key'], 99))
                     
-                    # Prefer Node 15 (Video Combine) if present
-                    node_priority = 0 if item['node_id'] == '15' else 1
+                    all_files.sort(key=sort_key)
+                    best_file = all_files[0]
+                    file_info = best_file['file_info']
                     
-                    return (node_priority, type_priority.get(item['type_key'], 99))
+                    logger.info(f"Selected output: Node {best_file['node_id']} ({best_file['type_key']}) - {file_info.get('filename')}")
+                    
+                    return "SUCCEEDED", {
+                        "filename": file_info.get('filename'),
+                        "subfolder": file_info.get('subfolder', ''),
+                        "type": file_info.get('type', 'output')
+                    }
                 
-                all_files.sort(key=sort_key)
+                return "FAILED", "No output found"
                 
-                best_file = all_files[0]
-                file_info = best_file['file_info']
-                
-                logger.info(f"Selected output: Node {best_file['node_id']} ({best_file['type_key']}) - {file_info.get('filename')}")
-                
-                return "SUCCEEDED", {
-                    "filename": file_info.get('filename'),
-                    "subfolder": file_info.get('subfolder', ''),
-                    "type": file_info.get('type', 'output')
-                }
+            # 2. Check queue
+            status = client.is_task_running(prompt_id, server)
+            if status == "UNKNOWN":
+                any_network_error = True
+            elif status in ["PENDING", "RUNNING"]:
+                logger.info(f"Task {prompt_id} is {status} on {server}")
+                return status, None
             
-            return "FAILED", "No output found"
-            
-        status = client.is_task_running(prompt_id)
-        logger.info(f"Querying task progress for {prompt_id}: {status}")
-        
-        if status in ["PENDING", "RUNNING"]:
-            return status, None
-        
-        # Double check history to avoid race condition
-        if prompt_id in client.get_history(prompt_id):
-             return check_status(prompt_id) # Recursion safe as it will hit first block
+            # Double check history if queue said NOT_FOUND (and history was checked before)
+            # But we already checked history.
+            # Race condition: Finished between history check and queue check?
+            if history is not None and status == "NOT_FOUND":
+                 # Check history again
+                 history_retry = client.get_history(prompt_id, server)
+                 if history_retry is not None and prompt_id in history_retry:
+                      return check_status(prompt_id, server) # Recursion to handle output parsing
+                 elif history_retry is None:
+                      any_network_error = True
 
-        return "FAILED", "Task not found"
-    except Exception as e:
-        logger.error(f"Check status error: {e}")
-        return "FAILED", str(e)
+        except Exception as e:
+            logger.error(f"Check status error for {prompt_id} on {server}: {e}")
+            any_network_error = True
 
-def download_result(file_info, output_dir):
+    # If we are here, task was not found in any reachable server.
+    if any_network_error:
+        logger.warning(f"Network error while checking status for {prompt_id}. Keeping as PENDING.")
+        return "PENDING", None 
+        
+    return "FAILED", "Task not found"
+
+def download_result(file_info, output_dir, server_address=None):
     return client.download_output_file(
         file_info['filename'], 
         file_info['subfolder'], 
         file_info['type'], 
-        output_dir
+        output_dir,
+        server_address
     )

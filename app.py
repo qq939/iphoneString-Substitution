@@ -528,14 +528,15 @@ def upload_audio():
         workflow = modify_audio_workflow(workflow, text, uploaded_filename, emotions)
         
         # Queue Prompt
-        prompt_id = comfy_utils.client.queue_prompt(workflow)
+        prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
         
         if prompt_id:
             # Register audio task
             task_info = {
                 'status': 'pending',
                 'url': None,
-                'input_video_path': input_video_path_for_stage2
+                'input_video_path': input_video_path_for_stage2,
+                'server': server_address
             }
             
             # Check if input was a video and save it for Stage 2 if so
@@ -687,25 +688,25 @@ def process_digital_human_video(audio_path, input_video_path=None):
             uploaded_audio_name
         )
         
-        prompt_id = comfy_utils.client.queue_prompt(current_workflow)
+        prompt_id, server_address = comfy_utils.client.queue_prompt(current_workflow)
         
         if not prompt_id:
             print("Failed to queue prompt")
             return
             
-        print(f"Task queued with ID: {prompt_id}")
+        print(f"Task queued with ID: {prompt_id} on {server_address}")
         
         # 5. Monitor Task
         print("Monitoring digital human task...")
         
         while True:
             try:
-                status, result = comfy_utils.check_status(prompt_id)
+                status, result = comfy_utils.check_status(prompt_id, server_address)
                 
                 if status == 'SUCCEEDED':
                     if isinstance(result, dict):
                         print("Task succeeded, downloading...")
-                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER, server_address)
                         
                         if local_path:
                             # Rename to YYYYMMDDHHMMSSall.mp4
@@ -975,13 +976,13 @@ def monitor_group_task(group_id):
                 
             # Check status from ComfyUI
             try:
-                status, result = comfy_utils.check_status(task['task_id'])
+                status, result = comfy_utils.check_status(task['task_id'], task.get('server'))
                 # print(f"Task {task['task_id']} status: {status}")
                 
                 if status == 'SUCCEEDED':
                     # Download result
                     if isinstance(result, dict):
-                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER)
+                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER, task.get('server'))
                         if local_path:
                             task['result_path'] = local_path
                             task['status'] = 'completed'
@@ -1191,7 +1192,7 @@ def upload_and_cut():
                 raise Exception("Failed to upload character")
                 
             # Submit job with workflow_type
-            prompt_id, error = comfy_utils.queue_workflow_template(
+            prompt_id, server_address, error = comfy_utils.queue_workflow_template(
                 comfy_char['name'], 
                 comfy_seg['name'], 
                 workflow_type=workflow_type,
@@ -1201,6 +1202,7 @@ def upload_and_cut():
             if prompt_id:
                 TASKS_STORE[group_id]['tasks'].append({
                     'task_id': prompt_id,
+                    'server': server_address,
                     'status': 'pending',
                     'segment_index': i,
                     'result_path': None
