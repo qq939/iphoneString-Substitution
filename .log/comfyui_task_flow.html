@@ -175,6 +175,79 @@ check_status(prompt_id, server_address)
     </div>
 
     <div class="section">
+        <h2>6. 思维导图：成功路径与失败路径</h2>
+        <div id="check-status-mindmap">
+            <pre style="font-size:12px; line-height:1.5; background:#020617; padding:12px 16px; border-radius:8px; border:1px solid #374151; overflow-x:auto;">
+ComfyUI 任务状态判断（思维导图）
+
+                      ┌──────────────────────────┐
+                      │   ComfyUI 任务状态判断   │
+                      └──────────┬──────────────┘
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        │                        │                        │
+        v                        v                        v
+  成功路径（SUCCEEDED）    挂起/进行中路径（PENDING/RUNNING）   失败路径（FAILED）
+
+
+成功路径（SUCCEEDED）
+---------------------
+- 选择服务器：
+  - 使用 server_address 或 SERVER_LIST
+- 对某一台 server：
+  - get_history(prompt_id, server)
+    - 找到包含该 prompt_id 的记录
+      - 解析 outputs，收集所有节点输出文件
+      - 选择最佳 file_info（优先视频，然后图片/音频）
+      - 立即返回：
+        - status = "SUCCEEDED"
+        - result = file_info
+- app 层的后续动作：
+  - 视频分段：
+    - 下载到本地 result_path
+    - 记录 task['status'] = 'completed'
+    - 最后拼接视频、合并音频、上传 OBS
+  - 音频任务：
+    - 下载音频，转 WAV，上传 OBS
+    - 更新 AUDIO_TASKS 中的 url
+    - 触发数字人视频生成
+
+
+挂起/进行中路径（PENDING / RUNNING）
+-----------------------------------
+- 某台服务器上 history 为 None 或 queue 接口异常：
+  - any_network_error = True
+- 某台服务器上队列中存在该任务：
+  - status ∈ {"PENDING", "RUNNING"}
+  - 返回 ("PENDING" or "RUNNING", None)
+- 所有服务器遍历完成后：
+  - 若 any_network_error 为 True 且没有成功结果：
+    - 返回 ("PENDING", None)
+    - 含义：网络抖动或正在执行，保持挂起，稍后重试
+
+
+失败路径（FAILED）
+------------------
+- 所有服务器都被正常访问：
+  - 对每台 server：
+    - get_history(prompt_id, server) 返回空或不含该 id
+    - queue 中也没有该 prompt_id（NOT_FOUND）
+    - 没有出现 UNKNOWN 或异常（即 any_network_error 为 False）
+- 汇总判断：
+  - 没有任何 SUCCEEDED
+  - 没有任何网络错误
+  - 任务在所有服务器的 history/queue 中都不存在
+- 最终返回：
+  - status = "FAILED"
+  - result = "Task not found"
+- app 层的后续动作：
+  - 标记任务或任务组为 failed
+  - 记录 error 信息，用于对外返回或日志排查
+            </pre>
+        </div>
+    </div>
+
+    <div class="section">
         <h2>1. 提交任务 queue_prompt</h2>
         <div class="flow-row">
             <div class="node">
