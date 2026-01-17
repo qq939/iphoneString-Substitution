@@ -16,7 +16,6 @@ from app import modify_digital_human_workflow, modify_extend_video_workflow
 def test_digital_human_monitor_respects_global_timeout(mock_time, mock_sleep):
     import app as app_module
     base_time = 1_000_000.0
-    # First call: used for computing start time; second call: simulate after timeout
     mock_time.side_effect = [base_time, base_time + app_module.BACKEND_TASK_TIMEOUT_SECONDS + 1]
 
     audio_path = 'dummy_audio.wav'

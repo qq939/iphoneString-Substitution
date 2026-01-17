@@ -21,6 +21,12 @@ class TestUIElements(unittest.TestCase):
             self.assertGreaterEqual(content.count('class="inline-refresh-btn"'), 4)
             self.assertGreaterEqual(content.count('<svg'), 4)
 
+    def test_character_video_plus_button_exists(self):
+        with open(self.index_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            self.assertIn('id="saveCharacterFromCurrentBtn"', content)
+            self.assertIn('onclick="saveCharacterFromCurrentVideo()"', content)
+
     def test_css_rules_exist(self):
         """Verify that new CSS rules for transparent controls exist"""
         with open(self.css_path, 'r', encoding='utf-8') as f:

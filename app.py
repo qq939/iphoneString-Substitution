@@ -620,45 +620,70 @@ def process_digital_human_video(audio_path, input_video_path=None):
             print(f"Input video uploaded as: {uploaded_video_name}")
             
         else:
-            # Fallback to Character logic
-            # Download Character from OBS
-            character_url = "http://obs.dimond.top/character.png"
-            character_filename = f"character_{uuid.uuid4()}.png"
-            character_path = os.path.join(UPLOAD_FOLDER, character_filename)
-            
-            print(f"Downloading character from {character_url}...")
-            try:
-                # Added timeout and headers
-                headers = {'User-Agent': 'Mozilla/5.0'}
-                response = requests.get(character_url, stream=True, timeout=30, headers=headers)
-                if response.status_code == 200:
-                    with open(character_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            f.write(chunk)
+            latest_character_video = get_latest_file_from_obs('character.mp4')
+            if latest_character_video:
+                character_video_url = f"http://obs.dimond.top/{latest_character_video}"
+                character_video_path = os.path.join(UPLOAD_FOLDER, f"character_video_{uuid.uuid4()}.mp4")
+                print(f"Downloading character.mp4 from OBS: {character_video_url}")
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    with requests.get(character_video_url, stream=True, timeout=30, headers=headers) as response:
+                        if response.status_code == 200:
+                            with open(character_video_path, 'wb') as f:
+                                for chunk in response.iter_content(chunk_size=8192):
+                                    f.write(chunk)
+                            stage2_video_path = character_video_path
+                        else:
+                            print(f"Failed to download character.mp4: {response.status_code}")
+                            stage2_video_path = None
+                except Exception as e:
+                    print(f"Error downloading character.mp4: {e}")
+                    stage2_video_path = None
+                
+                if stage2_video_path:
+                    print("Uploading character.mp4 to ComfyUI for extend-video workflow...")
+                    comfy_video = comfy_utils.client.upload_file(stage2_video_path)
+                    if not comfy_video:
+                        print("Failed to upload character.mp4 to ComfyUI")
+                        return
+                    uploaded_video_name = comfy_video.get('name')
                 else:
-                    print(f"Failed to download character: {response.status_code}")
                     return
-            except Exception as e:
-                print(f"Error downloading character: {e}")
-                return
-
-            # Generate 1s Video from Character
-            print("Generating 1s video from character...")
-            video_1s_filename = f"character_1s_{uuid.uuid4()}.mp4"
-            video_1s_path = os.path.join(UPLOAD_FOLDER, video_1s_filename)
-            try:
-                generate_1s_video(character_path, video_1s_path)
-            except Exception as e:
-                print(f"Error generating 1s video: {e}")
-                return
-
-            # Upload 1s Video
-            print("Uploading 1s video to ComfyUI...")
-            comfy_video = comfy_utils.client.upload_file(video_1s_path)
-            if not comfy_video:
-                print("Failed to upload 1s video to ComfyUI")
-                return
-            uploaded_video_name = comfy_video.get('name')
+            else:
+                character_url = "http://obs.dimond.top/character.png"
+                character_filename = f"character_{uuid.uuid4()}.png"
+                character_path = os.path.join(UPLOAD_FOLDER, character_filename)
+                
+                print(f"Downloading character from {character_url}...")
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    response = requests.get(character_url, stream=True, timeout=30, headers=headers)
+                    if response.status_code == 200:
+                        with open(character_path, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                    else:
+                        print(f"Failed to download character: {response.status_code}")
+                        return
+                except Exception as e:
+                    print(f"Error downloading character: {e}")
+                    return
+                
+                print("Generating 1s video from character...")
+                video_1s_filename = f"character_1s_{uuid.uuid4()}.mp4"
+                video_1s_path = os.path.join(UPLOAD_FOLDER, video_1s_filename)
+                try:
+                    generate_1s_video(character_path, video_1s_path)
+                except Exception as e:
+                    print(f"Error generating 1s video: {e}")
+                    return
+                
+                print("Uploading 1s video to ComfyUI...")
+                comfy_video = comfy_utils.client.upload_file(video_1s_path)
+                if not comfy_video:
+                    print("Failed to upload 1s video to ComfyUI")
+                    return
+                uploaded_video_name = comfy_video.get('name')
         
         # Upload Full Audio
         print("Uploading audio to ComfyUI...")
@@ -1344,6 +1369,38 @@ def get_latest_video():
         return jsonify({'url': obs_url})
     except Exception as e:
         print(f"Error fetching latest video: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/save_character_from_current', methods=['POST'])
+def save_character_from_current():
+    try:
+        latest_file = get_latest_file_from_obs('all.mp4')
+        if not latest_file:
+            return jsonify({'error': 'No latest video found on OBS'}), 404
+        source_url = f"http://obs.dimond.top/{latest_file}"
+        print(f"Downloading latest video for character.mp4 from {source_url}")
+        character_temp = os.path.join(UPLOAD_FOLDER, f"character_src_{uuid.uuid4()}.mp4")
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        with requests.get(source_url, stream=True, timeout=30, headers=headers) as r:
+            if r.status_code != 200:
+                return jsonify({'error': f'Failed to download latest video: {r.status_code}'}), 500
+            with open(character_temp, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        info = ffmpeg_utils.get_video_info(character_temp)
+        duration = info.get('duration', 0)
+        end_time = min(10, duration) if duration and duration > 0 else 10
+        character_clip = os.path.join(UPLOAD_FOLDER, 'character.mp4')
+        ffmpeg_utils.cut_video(character_temp, character_clip, 0, end_time)
+        obs_url = obs_utils.upload_file(character_clip, 'character.mp4', mime_type='video/mp4')
+        try:
+            if os.path.exists(character_temp):
+                os.remove(character_temp)
+        except OSError:
+            pass
+        return jsonify({'status': 'success', 'url': obs_url})
+    except Exception as e:
+        print(f"Error saving character from current video: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

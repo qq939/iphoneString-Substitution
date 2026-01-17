@@ -111,7 +111,15 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a> <button type="button" class="inline-refresh-btn" onclick="updateLatestVideo(true)" aria-label="刷新当前视频"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
+                <h2>
+                    <a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a>
+                    <button type="button" class="inline-refresh-btn" onclick="updateLatestVideo(true)" aria-label="刷新当前视频">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    </button>
+                    <button type="button" id="saveCharacterFromCurrentBtn" class="inline-refresh-btn" onclick="saveCharacterFromCurrentVideo()" aria-label="保存当前视频前10秒为 character.mp4 并上传OBS">
+                        +
+                    </button>
+                </h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <video id="latestVideoPreview" autoplay muted loop controls style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #00ff00;">
                         Your browser does not support the video tag.
@@ -379,6 +387,25 @@
                     }
                 })
                 .catch(err => console.error('Error fetching latest video:', err));
+        }
+
+        async function saveCharacterFromCurrentVideo() {
+            const btn = document.getElementById('saveCharacterFromCurrentBtn');
+            if (!btn) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch('/save_character_from_current', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    alert('character.mp4 已上传到 OBS');
+                } else {
+                    alert('保存失败: ' + (data.error || 'Unknown'));
+                }
+            } catch (e) {
+                alert('系统错误: ' + e.message);
+            } finally {
+                btn.disabled = false;
+            }
         }
         
         // Check for latest video every 30 seconds

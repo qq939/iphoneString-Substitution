@@ -116,3 +116,28 @@ def test_monitor_audio_task_stops_after_global_timeout(mock_time, mock_sleep):
     with app.AUDIO_LOCK:
         assert app.AUDIO_TASKS[prompt_id]['status'] == 'failed'
         assert 'timeout' in app.AUDIO_TASKS[prompt_id].get('error', '').lower()
+
+
+@patch('app.get_latest_file_from_obs')
+def test_stage2_uses_obs_character_when_no_input_video(mock_get_latest):
+    mock_get_latest.return_value = 'character.mp4'
+    from app import process_digital_human_video
+
+    with patch('app.requests.get') as mock_get, \
+         patch('app.os.path.exists', return_value=True), \
+         patch('builtins.open'), \
+         patch('app.comfy_utils.client.upload_file', return_value={'name': 'uploaded_character.mp4'}) as mock_upload, \
+         patch('app.json.load', return_value={}), \
+         patch('app.modify_extend_video_workflow', return_value={}) as mock_modify, \
+         patch('app.comfy_utils.client.queue_prompt', return_value=('pid', 'server')):
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.iter_content.return_value = [b'video']
+        resp.__enter__.return_value = resp
+        mock_get.return_value = resp
+
+        process_digital_human_video('dummy_audio.wav', None)
+
+        mock_get_latest.assert_called_with('character.mp4')
+        mock_upload.assert_called()
