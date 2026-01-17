@@ -322,25 +322,46 @@ def cancel_job(prompt_id):
 
 def adjust_segment_length(workflow, segment_duration):
     try:
-        fps = 16
-        node_id_video = "232:15"
-        if node_id_video in workflow and "inputs" in workflow[node_id_video] and "fps" in workflow[node_id_video]["inputs"]:
-            fps = workflow[node_id_video]["inputs"]["fps"]
-        target = int(math.ceil(segment_duration * fps))
-        base_a = workflow.get("232:62", {}).get("inputs", {}).get("length")
-        base_b = workflow.get("242:90", {}).get("inputs", {}).get("length")
-        max_allowed = None
-        for v in (base_a, base_b):
-            if isinstance(v, int):
-                max_allowed = v if max_allowed is None else min(max_allowed, v)
-        min_allowed = 4
-        if max_allowed is not None:
-            target = min(target, max_allowed)
-        if target < min_allowed:
-            target = min_allowed
-        for node_id in ["232:62", "242:90"]:
-            if node_id in workflow and "inputs" in workflow[node_id]:
-                workflow[node_id]["inputs"]["length"] = target
+        # 新版 WanVaceToVideo 工作流（视频换人2video_wan_vace_14B_v2v.json）
+        if "49" in workflow and workflow.get("49", {}).get("class_type") == "WanVaceToVideo":
+            fps = 16
+            node_id_video = "68"
+            if (
+                node_id_video in workflow
+                and "inputs" in workflow[node_id_video]
+                and "fps" in workflow[node_id_video]["inputs"]
+            ):
+                fps = workflow[node_id_video]["inputs"]["fps"]
+            target = int(math.ceil(segment_duration * fps))
+            if target < 4:
+                target = 4
+            if "49" in workflow and "inputs" in workflow["49"]:
+                workflow["49"]["inputs"]["length"] = target
+        else:
+            # 旧版 WanAnimate 工作流（视频换人video_wan2_2_14B_animate.json）
+            fps = 16
+            node_id_video = "232:15"
+            if (
+                node_id_video in workflow
+                and "inputs" in workflow[node_id_video]
+                and "fps" in workflow[node_id_video]["inputs"]
+            ):
+                fps = workflow[node_id_video]["inputs"]["fps"]
+            target = int(math.ceil(segment_duration * fps))
+            base_a = workflow.get("232:62", {}).get("inputs", {}).get("length")
+            base_b = workflow.get("242:90", {}).get("inputs", {}).get("length")
+            max_allowed = None
+            for v in (base_a, base_b):
+                if isinstance(v, int):
+                    max_allowed = v if max_allowed is None else min(max_allowed, v)
+            min_allowed = 4
+            if max_allowed is not None:
+                target = min(target, max_allowed)
+            if target < min_allowed:
+                target = min_allowed
+            for node_id in ["232:62", "242:90"]:
+                if node_id in workflow and "inputs" in workflow[node_id]:
+                    workflow[node_id]["inputs"]["length"] = target
     except Exception as e:
         logger.warning(f"Failed to adjust segment length: {e}")
     return workflow
@@ -348,9 +369,17 @@ def adjust_segment_length(workflow, segment_duration):
 def queue_workflow_template(char_filename, video_filename, prompt_text=None, workflow_type='real', segment_duration=None):
     try:
         if workflow_type == 'anime':
-            workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '真人换动漫.json')
+            workflow_path = os.path.join(
+                os.path.dirname(__file__),
+                'comfyapi',
+                '视频换人2video_wan_vace_14B_v2v.json',
+            )
         else:
-            workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '视频换人video_wan2_2_14B_animate.json')
+            workflow_path = os.path.join(
+                os.path.dirname(__file__),
+                'comfyapi',
+                '视频换人video_wan2_2_14B_animate.json',
+            )
             
         if not os.path.exists(workflow_path):
             return None, None, f"Workflow file not found: {workflow_path}"
@@ -359,8 +388,11 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
             workflow = json.load(f)
             
         # Update inputs
-        if "10" in workflow: workflow["10"]["inputs"]["image"] = char_filename
-        if "145" in workflow: workflow["145"]["inputs"]["file"] = video_filename
+        for node_id in ("10", "134"):
+            if node_id in workflow and "inputs" in workflow[node_id] and "image" in workflow[node_id]["inputs"]:
+                workflow[node_id]["inputs"]["image"] = char_filename
+        if "145" in workflow and "inputs" in workflow["145"] and "file" in workflow["145"]["inputs"]:
+            workflow["145"]["inputs"]["file"] = video_filename
         if prompt_text and "21" in workflow: workflow["21"]["inputs"]["text"] = prompt_text
         if segment_duration is not None:
             workflow = adjust_segment_length(workflow, segment_duration)
