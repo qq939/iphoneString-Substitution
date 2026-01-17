@@ -397,7 +397,7 @@ ComfyUI 任务状态判断（思维导图）
 
     <div class="section">
         <h2>7. 网络错误判定 Canvas 示意图</h2>
-        <canvas id="network-error-canvas" width="900" height="260" style="background:#020617;border-radius:8px;border:1px solid #374151;max-width:100%;"></canvas>
+        <canvas id="network-error-canvas" width="900" height="320" style="background:#020617;border-radius:8px;border:1px solid #374151;max-width:100%;"></canvas>
     </div>
 </div>
 <script>
@@ -405,6 +405,7 @@ ComfyUI 任务状态判断（思维导图）
         var canvas = document.getElementById("network-error-canvas");
         if (!canvas || !canvas.getContext) return;
         var ctx = canvas.getContext("2d");
+        var LAYOUT_VERSION = "LAYOUT_V2_NON_OVERLAP";
 
         function box(x, y, w, h, text, color) {
             ctx.fillStyle = "#0b1120";
@@ -445,29 +446,28 @@ ComfyUI 任务状态判断（思维导图）
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        box(30, 95, 150, 60, "check_status\n调用端", "#6b7280");
+        box(40, 130, 150, 60, "check_status\n调用端", "#6b7280");
         box(260, 40, 180, 60, "History\nGET /history/<id>", "#22c55e");
-        box(260, 150, 180, 60, "Queue\nGET /queue", "#3b82f6");
+        box(260, 220, 180, 60, "Queue\nGET /queue", "#3b82f6");
 
-        box(520, 20, 170, 60, "正常响应\n找到 outputs\n→ SUCCEEDED", "#22c55e");
-        box(520, 100, 170, 60, "正常响应\n队列有任务\n→ PENDING/RUNNING", "#eab308");
-        box(520, 180, 170, 60, "所有服务器无任务\n且无网络错误\n→ FAILED", "#ef4444");
+        box(520, 40, 180, 60, "正常响应\n找到 outputs\n→ SUCCEEDED", "#22c55e");
+        box(520, 130, 180, 60, "所有服务器无任务\n且无网络错误\n→ FAILED", "#ef4444");
+        box(520, 220, 180, 60, "正常响应\n队列有任务\n→ PENDING/RUNNING", "#eab308");
 
-        box(720, 80, 160, 80, "Network Error\nhistory 返回 None\n或 queue 返回 UNKNOWN\n→ 标记 any_network_error", "#f97316");
+        box(740, 120, 160, 80, "Network Error\nhistory 返回 None\n或 queue 返回 UNKNOWN\n→ 标记 any_network_error", "#f97316");
+        box(520, 280, 180, 40, "any_network_error 为真\n且没有 SUCCEEDED\n→ 返回 PENDING", "#f97316");
 
-        arrow(180, 125, 260, 70, "请求 history");
-        arrow(180, 125, 260, 180, "请求 queue");
+        arrow(190, 160, 260, 70, "请求 history");
+        arrow(190, 160, 260, 250, "请求 queue");
 
-        arrow(440, 70, 520, 50, "");
-        arrow(440, 180, 520, 130, "");
+        arrow(440, 70, 520, 70, "");
+        arrow(440, 250, 520, 250, "");
 
-        arrow(440, 70, 720, 120, "异常");
-        arrow(440, 180, 720, 120, "异常");
+        arrow(440, 70, 740, 160, "异常");
+        arrow(440, 250, 740, 160, "异常");
 
-        arrow(605, 210, 520, 210, "所有 server 正常且无记录");
-
-        box(520, 260 - 50, 170, 40, "any_network_error 为真\n且没有 SUCCEEDED\n→ 返回 PENDING", "#f97316");
-        arrow(800, 160, 605, 250, "存在网络错误");
+        arrow(610, 100, 520, 160, "无记录");
+        arrow(820, 160, 610, 300, "存在网络错误");
     })();
 </script>
 </body>

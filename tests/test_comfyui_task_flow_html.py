@@ -20,3 +20,12 @@ def test_comfyui_task_flow_html_exists_and_has_keywords():
     # Canvas 网络错误示意图标识
     assert 'id="network-error-canvas"' in content
     assert "Network Error" in content
+
+
+def test_network_error_canvas_layout_has_v2_marker():
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    path = os.path.join(project_root, ".log", "comfyui_task_flow.html")
+    assert os.path.exists(path)
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "LAYOUT_V2_NON_OVERLAP" in content

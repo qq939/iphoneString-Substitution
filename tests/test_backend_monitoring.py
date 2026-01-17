@@ -91,3 +91,28 @@ def test_backend_proactive_monitoring(client):
         
         # Verify Stage 2 was triggered
         assert mock_stage2.called
+
+
+@patch('app.time.sleep', return_value=None)
+@patch('app.time.time')
+def test_monitor_audio_task_stops_after_global_timeout(mock_time, mock_sleep):
+    prompt_id = 'timeout_prompt'
+    now = 1_000_000.0
+    mock_time.return_value = now
+
+    # Prepare AUDIO_TASKS entry with created_at far in the past
+    with app.AUDIO_LOCK:
+        app.AUDIO_TASKS[prompt_id] = {
+            'status': 'pending',
+            'url': None,
+            'input_video_path': None,
+            'server': None,
+            'created_at': now - (app.BACKEND_TASK_TIMEOUT_SECONDS + 1),
+        }
+
+    with patch('app.comfy_utils.check_status', return_value=('PENDING', None)):
+        app.monitor_audio_task(prompt_id)
+
+    with app.AUDIO_LOCK:
+        assert app.AUDIO_TASKS[prompt_id]['status'] == 'failed'
+        assert 'timeout' in app.AUDIO_TASKS[prompt_id].get('error', '').lower()

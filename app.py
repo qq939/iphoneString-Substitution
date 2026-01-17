@@ -88,6 +88,9 @@ TASKS_STORE = {}
 AUDIO_TASKS = {}
 AUDIO_LOCK = threading.Lock()
 
+BACKEND_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
+BACKEND_POLL_INTERVAL_SECONDS = 15
+
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
     """
     Modifies the digital human video workflow JSON based on inputs.
@@ -527,20 +530,16 @@ def upload_audio():
             
         workflow = modify_audio_workflow(workflow, text, uploaded_filename, emotions)
         
-        # Queue Prompt
         prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
         
         if prompt_id:
-            # Register audio task
             task_info = {
                 'status': 'pending',
                 'url': None,
                 'input_video_path': input_video_path_for_stage2,
-                'server': server_address
+                'server': server_address,
+                'created_at': time.time(),
             }
-            
-            # Check if input was a video and save it for Stage 2 if so
-            # (Moved logic to before cleanup)
 
             with AUDIO_LOCK:
                 AUDIO_TASKS[prompt_id] = task_info
@@ -696,11 +695,15 @@ def process_digital_human_video(audio_path, input_video_path=None):
             
         print(f"Task queued with ID: {prompt_id} on {server_address}")
         
-        # 5. Monitor Task
         print("Monitoring digital human task...")
+        start_time = time.time()
         
         while True:
             try:
+                if time.time() - start_time > BACKEND_TASK_TIMEOUT_SECONDS:
+                    print("Digital human task timed out after 6 hours")
+                    break
+                
                 status, result = comfy_utils.check_status(prompt_id, server_address)
                 
                 if status == 'SUCCEEDED':
@@ -709,14 +712,11 @@ def process_digital_human_video(audio_path, input_video_path=None):
                         local_path = comfy_utils.download_result(result, UPLOAD_FOLDER, server_address)
                         
                         if local_path:
-                            # Rename to YYYYMMDDHHMMSSall.mp4
                             output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
                             output_path = os.path.join(UPLOAD_FOLDER, output_filename)
                             
-                            # Just rename/move
                             shutil.move(local_path, output_path)
                             
-                            # Upload to OBS
                             print(f"Uploading result to OBS as {output_filename}...")
                             obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
                             
@@ -736,9 +736,8 @@ def process_digital_human_video(audio_path, input_video_path=None):
                     
             except Exception as e:
                 print(f"Error checking task: {e}")
-                # Retry
             
-            time.sleep(10)
+            time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
             
         # Cleanup
         if os.path.exists(character_path):
@@ -833,18 +832,21 @@ def monitor_audio_task(prompt_id):
         with AUDIO_LOCK:
             if prompt_id not in AUDIO_TASKS:
                 break
-            status = AUDIO_TASKS[prompt_id]['status']
+            task_data = AUDIO_TASKS[prompt_id]
+            status = task_data['status']
+            created_at = task_data.get('created_at')
+            if created_at is not None and time.time() - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
+                AUDIO_TASKS[prompt_id]['status'] = 'failed'
+                AUDIO_TASKS[prompt_id]['error'] = 'Timeout: audio task exceeded 6 hours'
+                print(f"Audio task {prompt_id} timed out after 6 hours")
+                break
             if status in ['completed', 'failed']:
                 break
-            # If processing_result, we assume another thread (maybe check_audio_status) is handling it
-            # But actually we want to handle it if we find it succeeded.
-            # So we continue checking ComfyUI.
-            
+        
         try:
             status, result = comfy_utils.check_status(prompt_id)
             
             if status == 'SUCCEEDED':
-                # Try to claim processing rights
                 should_process = False
                 with AUDIO_LOCK:
                     current_status = AUDIO_TASKS.get(prompt_id, {}).get('status')
@@ -859,7 +861,7 @@ def monitor_audio_task(prompt_id):
                         with AUDIO_LOCK:
                             if prompt_id in AUDIO_TASKS:
                                 AUDIO_TASKS[prompt_id]['status'] = 'failed'
-                break # Exit loop after success (or failed processing)
+                break
                 
             elif status == 'FAILED':
                 with AUDIO_LOCK:
@@ -870,7 +872,7 @@ def monitor_audio_task(prompt_id):
         except Exception as e:
             print(f"Monitor error for {prompt_id}: {e}")
             
-        time.sleep(5) # Poll every 5 seconds
+        time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
 
 @app.route('/check_audio_status/<prompt_id>', methods=['GET'])
 def check_audio_status(prompt_id):
@@ -962,6 +964,14 @@ def monitor_group_task(group_id):
         return
 
     while True:
+        now = time.time()
+        created_at = group_data.get('created_at')
+        if created_at is not None and now - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
+            group_data['status'] = 'failed'
+            group_data['error'] = 'Timeout: group exceeded 6 hours'
+            print(f"Group {group_id} timed out after 6 hours")
+            break
+
         all_done = True
         any_failed = False
         
@@ -1082,8 +1092,7 @@ def monitor_group_task(group_id):
             print(f"Group {group_id} finished with status {group_data['status']}")
             break
             
-        # Wait 30 seconds
-        time.sleep(30)
+        time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
 
 @app.route('/upload_and_cut', methods=['POST'])
 def upload_and_cut():

@@ -60,5 +60,40 @@ class TestNoMoviePy(unittest.TestCase):
         from app import monitor_group_task
         self.assertTrue(callable(monitor_group_task))
 
+    @patch('app.time.sleep', return_value=None)
+    @patch('app.time.time')
+    def test_monitor_group_task_stops_after_6_hours(self, mock_time, mock_sleep):
+        import app as app_module
+        from app import monitor_group_task, TASKS_STORE
+        now = 1_000_000.0
+        mock_time.return_value = now
+        group_id = 'test_group_timeout'
+        TASKS_STORE[group_id] = {
+            'status': 'processing',
+            'tasks': [
+                {
+                    'task_id': 't1',
+                    'server': None,
+                    'status': 'pending',
+                    'segment_index': 0,
+                    'result_path': None
+                }
+            ],
+            'created_at': now - (6 * 60 * 60 + 1),
+            'audio_path': None,
+            'workflow_type': 'real'
+        }
+        with patch('app.comfy_utils.check_status', return_value=('PENDING', None)), \
+             patch('app.ffmpeg_utils.concatenate_videos'), \
+             patch('app.obs_utils.upload_file', return_value='http://example.com/video.mp4'):
+            monitor_group_task(group_id)
+        self.assertEqual(TASKS_STORE[group_id]['status'], 'failed')
+        self.assertIn('timeout', TASKS_STORE[group_id].get('error', '').lower())
+
+    def test_backend_poll_interval_at_least_15_seconds(self):
+        import app as app_module
+        self.assertTrue(hasattr(app_module, 'BACKEND_POLL_INTERVAL_SECONDS'))
+        self.assertGreaterEqual(app_module.BACKEND_POLL_INTERVAL_SECONDS, 15)
+
 if __name__ == '__main__':
     unittest.main()

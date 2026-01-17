@@ -3,11 +3,35 @@ import sys
 import json
 import random
 import math
+from unittest.mock import patch
 
 # Add parent directory to path to import app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import modify_digital_human_workflow, modify_extend_video_workflow
+
+
+@patch('app.time.sleep', return_value=None)
+@patch('app.time.time')
+def test_digital_human_monitor_respects_global_timeout(mock_time, mock_sleep):
+    import app as app_module
+    base_time = 1_000_000.0
+    # First call: used for computing start time; second call: simulate after timeout
+    mock_time.side_effect = [base_time, base_time + app_module.BACKEND_TASK_TIMEOUT_SECONDS + 1]
+
+    audio_path = 'dummy_audio.wav'
+
+    with patch('app.os.path.exists', return_value=True), \
+         patch('app.generate_1s_video'), \
+         patch('app.comfy_utils.client.upload_file', return_value={'name': 'dummy_name'}), \
+         patch('app.json.load', return_value={}), \
+         patch('builtins.open'), \
+         patch('app.modify_extend_video_workflow', return_value={}), \
+         patch('app.comfy_utils.client.queue_prompt', return_value=('pid', 'server')), \
+         patch('app.comfy_utils.check_status', return_value=('PENDING', None)), \
+         patch('app.comfy_utils.download_result', return_value=None), \
+         patch('app.obs_utils.upload_file', return_value=None):
+        app_module.process_digital_human_video(audio_path)
 
 def test_modify_extend_workflow():
     # 1. Load the extend video workflow
