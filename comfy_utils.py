@@ -403,10 +403,21 @@ def check_status(prompt_id, server_address=None):
             
             elif prompt_id in history:
                 # Found!
-                # Log detailed response content as requested
-                logger.info(f"Task {prompt_id} completed on {server}. History data: {json.dumps(history[prompt_id], indent=2, ensure_ascii=False)}")
-                
-                outputs = history[prompt_id].get('outputs', {})
+                data = history[prompt_id]
+                outputs = data.get('outputs', {})
+
+                # 只记录关键信息，避免输出整个 history JSON
+                summary_items = []
+                for node_id, node_output in outputs.items():
+                    for type_key in ['gifs', 'videos', 'images', 'audio']:
+                        if type_key in node_output:
+                            count = len(node_output[type_key])
+                            summary_items.append(f"{node_id}:{type_key}={count}")
+
+                summary_str = ", ".join(summary_items) if summary_items else "no outputs"
+                logger.info(
+                    f"Task {prompt_id} completed on {server}. Output summary: {summary_str}"
+                )
                 
                 # Collect all outputs to find the best one
                 all_files = []
