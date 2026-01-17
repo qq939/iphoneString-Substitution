@@ -124,6 +124,57 @@
     </div>
 
     <div class="section">
+        <h2>5. 树形判断结构（check_status）</h2>
+        <div id="check-status-tree">
+            <pre style="font-size:12px; line-height:1.5; background:#020617; padding:12px 16px; border-radius:8px; border:1px solid #374151; overflow-x:auto;">
+check_status(prompt_id, server_address)
+│
+├─ 选择待检查服务器 servers_to_check
+│   ├─ 如果 server_address 非空 → [仅此一台]
+│   └─ 否则 → [遍历 SERVER_LIST 中所有服务器]
+│
+└─ 对每个 server in servers_to_check:
+    │
+    ├─ history = get_history(prompt_id, server)
+    │   ├─ history is None
+    │   │   └─ any_network_error = True          # 不立即失败，只记录网络异常
+    │   │
+    │   └─ history 中包含 prompt_id
+    │       ├─ 解析 outputs，选出最佳文件
+    │       └─ 返回  SUCCEEDED, file_info        # 整个函数结束
+    │
+    └─ status = is_task_running(prompt_id, server)
+        │
+        ├─ status == "UNKNOWN"
+        │   └─ any_network_error = True          # 视为网络异常
+        │
+        ├─ status ∈ {"PENDING", "RUNNING"}
+        │   └─ 返回  status, None                # 任务仍在排队/运行
+        │
+        └─ status == "NOT_FOUND"
+            │
+            └─ 如果刚才 history 非 None:
+                ├─ 再次调用 get_history(prompt_id, server)
+                │   ├─ 若找到 → 递归调用 check_status(prompt_id, server)
+                │   └─ 若返回 None → any_network_error = True
+                └─ 否则继续下一台 server
+
+遍历结束后的总决策：
+
+├─ 如果在任一 server 上返回 SUCCEEDED
+│   └─ 已在循环中提前返回
+│
+├─ 如果 any_network_error 为 True
+│   └─ 返回  PENDING, None
+│       # 有网络抖动，保持任务挂起状态，避免误判 FAILED
+│
+└─ 否则（所有服务器都正常返回，且都没有该任务）
+    └─ 返回  FAILED, "Task not found"
+            </pre>
+        </div>
+    </div>
+
+    <div class="section">
         <h2>1. 提交任务 queue_prompt</h2>
         <div class="flow-row">
             <div class="node">
@@ -273,4 +324,3 @@
 </div>
 </body>
 </html>
-
