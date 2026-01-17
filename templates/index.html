@@ -181,7 +181,11 @@
             </div>
             <div class="grid-content">
                 <h2>图生视频 11</h2>
-                <input type="text" id="i2vText11" class="upload-input" placeholder="输入图生视频脚本">
+                <div class="i2v-container">
+                    <input type="text" id="i2vText11" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
+                    <button type="button" class="action-btn" onclick="submitI2V(11)">SUBMIT</button>
+                </div>
+                <div id="i2vStatus11" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         <div class="grid-item item-12">
@@ -190,7 +194,11 @@
             </div>
             <div class="grid-content">
                 <h2>图生视频 12</h2>
-                <input type="text" id="i2vText12" class="upload-input" placeholder="输入图生视频脚本">
+                <div class="i2v-container">
+                    <input type="text" id="i2vText12" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
+                    <button type="button" class="action-btn" onclick="submitI2V(12)">SUBMIT</button>
+                </div>
+                <div id="i2vStatus12" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         <div class="grid-item item-13">
@@ -199,7 +207,11 @@
             </div>
             <div class="grid-content">
                 <h2>图生视频 13</h2>
-                <input type="text" id="i2vText13" class="upload-input" placeholder="输入图生视频脚本">
+                <div class="i2v-container">
+                    <input type="text" id="i2vText13" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
+                    <button type="button" class="action-btn" onclick="submitI2V(13)">SUBMIT</button>
+                </div>
+                <div id="i2vStatus13" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         <div class="grid-item item-14">
@@ -208,9 +220,11 @@
             </div>
             <div class="grid-content">
                 <h2>图生视频 14</h2>
-                <input type="text" id="i2vText14" class="upload-input" placeholder="输入图生视频脚本">
-                <button type="button" id="i2vSubmitBtn" class="action-btn" style="margin-top: 5px;">SUBMIT</button>
-                <div id="i2vStatus" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+                <div class="i2v-container">
+                    <input type="text" id="i2vText14" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
+                    <button type="button" class="action-btn" onclick="submitI2V(14)">SUBMIT</button>
+                </div>
+                <div id="i2vStatus14" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         {% for i in range(15, 17) %}
@@ -538,52 +552,62 @@
         updateLatestAudio();
         setInterval(updateLatestAudio, 30000);
 
-        document.getElementById('i2vSubmitBtn').onclick = async function() {
-            const statusDiv = document.getElementById('i2vStatus');
-            const t11 = document.getElementById('i2vText11').value;
-            const t12 = document.getElementById('i2vText12').value;
-            const t13 = document.getElementById('i2vText13').value;
-            const t14 = document.getElementById('i2vText14').value;
+        function submitI2V(index) {
+            const statusDiv = document.getElementById(`i2vStatus${index}`);
+            const textInput = document.getElementById(`i2vText${index}`);
+            const text = textInput.value;
+            const btn = textInput.parentElement.querySelector('button');
+            
             statusDiv.innerText = 'SUBMITTING...';
-            this.disabled = true;
-            try {
-                const res = await fetch('/generate_i2v_group', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({texts: [t11, t12, t13, t14]})
-                });
-                const data = await res.json();
-                if (!res.ok) {
+            btn.disabled = true;
+            
+            // Construct texts array with only the current index populated
+            // Sector 11 -> index 0, ..., Sector 14 -> index 3
+            const texts = ["", "", "", ""];
+            texts[index - 11] = text;
+            
+            fetch('/generate_i2v_group', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({texts: texts})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'processing') {
+                    statusDiv.innerText = 'PROCESSING...';
+                    const groupId = data.group_id;
+                    const poll = setInterval(() => {
+                        fetch(`/check_group_status/${groupId}`)
+                            .then(r => r.json())
+                            .then(s => {
+                                if (s.status === 'processing') {
+                                    statusDiv.innerText = `PROCESSING... [${s.progress}]`;
+                                } else {
+                                    clearInterval(poll);
+                                    if (s.status === 'completed') {
+                                        statusDiv.innerText = 'COMPLETED.';
+                                        updateLatestVideo(true);
+                                    } else {
+                                        statusDiv.innerText = 'FAILED: ' + (s.error || 'Unknown');
+                                    }
+                                    btn.disabled = false;
+                                }
+                            })
+                            .catch(e => {
+                                // Ignore transient errors
+                            });
+                    }, 2000);
+                } else {
                     statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown');
-                    this.disabled = false;
-                    return;
+                    btn.disabled = false;
                 }
-                statusDiv.innerText = 'PROCESSING...';
-                const groupId = data.group_id;
-                const poll = setInterval(async () => {
-                    try {
-                        const r = await fetch(`/check_group_status/${groupId}`);
-                        const s = await r.json();
-                        if (s.status === 'processing') {
-                            statusDiv.innerText = `PROCESSING... [${s.progress}]`;
-                        } else {
-                            clearInterval(poll);
-                            if (s.status === 'completed') {
-                                statusDiv.innerText = 'COMPLETED.';
-                                updateLatestVideo(true);
-                            } else {
-                                statusDiv.innerText = 'FAILED: ' + (s.error || 'Unknown');
-                            }
-                            document.getElementById('i2vSubmitBtn').disabled = false;
-                        }
-                    } catch (e) {
-                    }
-                }, 2000);
-            } catch (e) {
+            })
+            .catch(e => {
                 statusDiv.innerText = 'SYSTEM FAILURE: ' + e.message;
-                this.disabled = false;
-            }
-        };
+                btn.disabled = false;
+            });
+        }
+
 
     </script>
 </body>

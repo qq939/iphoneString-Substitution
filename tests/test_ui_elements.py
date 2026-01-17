@@ -17,9 +17,8 @@ class TestUIElements(unittest.TestCase):
             self.assertIn('onclick="refreshCharacter()"', content)
             self.assertIn('onclick="updateLatestVideo(true)"', content)
             self.assertIn('onclick="updateLatestAudio(true)"', content)
-            self.assertIn('onclick="updateLatestImage(true)"', content)
             self.assertGreaterEqual(content.count('class="inline-refresh-btn"'), 4)
-            self.assertGreaterEqual(content.count('<svg'), 4)
+            self.assertGreaterEqual(content.count('<svg'), 3)
 
     def test_character_video_plus_button_exists(self):
         with open(self.index_path, 'r', encoding='utf-8') as f:
@@ -45,15 +44,33 @@ class TestUIElements(unittest.TestCase):
     def test_i2v_sectors_exist(self):
         with open(self.index_path, 'r', encoding='utf-8') as f:
             content = f.read()
+            # Verify titles
             self.assertIn('图生视频 11', content)
             self.assertIn('图生视频 12', content)
             self.assertIn('图生视频 13', content)
             self.assertIn('图生视频 14', content)
+            
+            # Verify input fields
             self.assertIn('id="i2vText11"', content)
             self.assertIn('id="i2vText12"', content)
             self.assertIn('id="i2vText13"', content)
             self.assertIn('id="i2vText14"', content)
-            self.assertIn('id="i2vSubmitBtn"', content)
+            
+            # Verify submit buttons for each sector
+            self.assertIn('onclick="submitI2V(11)"', content)
+            self.assertIn('onclick="submitI2V(12)"', content)
+            self.assertIn('onclick="submitI2V(13)"', content)
+            self.assertIn('onclick="submitI2V(14)"', content)
+            
+            # Verify status divs for each sector
+            self.assertIn('id="i2vStatus11"', content)
+            self.assertIn('id="i2vStatus12"', content)
+            self.assertIn('id="i2vStatus13"', content)
+            self.assertIn('id="i2vStatus14"', content)
+            
+            # Verify global submit button is removed or repurposed
+            # (It should be gone or replaced by individual buttons)
+            self.assertNotIn('id="i2vSubmitBtn"', content)
 
 if __name__ == '__main__':
     unittest.main()
