@@ -17,3 +17,6 @@ def test_comfyui_task_flow_html_exists_and_has_keywords():
     assert "成功路径" in content
     assert "失败路径" in content
     assert 'id="check-status-mindmap"' in content
+    # Canvas 网络错误示意图标识
+    assert 'id="network-error-canvas"' in content
+    assert "Network Error" in content
