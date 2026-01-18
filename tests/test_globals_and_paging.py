@@ -66,3 +66,15 @@ def test_sector8_and_9_have_content():
         assert "latestAudioPreview" in content
         assert "Sector9" in content
         assert "RESERVED SLOT" in content
+
+
+def test_sector_titles_have_alias_and_sector_suffix():
+    with timeout_scope(5):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(base_dir)
+        index_path = os.path.join(project_root, "templates", "index.html")
+        with open(index_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # 样本检查：Sector1 / 7 / 11 的标题中应包含 "(SectorX)" 形式的别名标记
+        for i in (1, 7, 11):
+            assert f"(Sector{i})" in content
