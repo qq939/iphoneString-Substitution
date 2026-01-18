@@ -1278,6 +1278,7 @@ def monitor_i2v_group(group_id):
                         if local_path:
                             task['result_path'] = local_path
                             task['status'] = 'completed'
+                            print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
                         else:
                             task['status'] = 'failed'
                     else:
