@@ -7,8 +7,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="page-nav page-nav-left">&#9664;</div>
-    <div class="page-nav page-nav-right">&#9654;</div>
     <div class="page-container">
         <div class="grid-container page page-1 active">
         <div class="grid-item item-1">
@@ -159,7 +157,13 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>Sector8</h2>
+                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">Sector8</a> <button type="button" class="inline-refresh-btn" onclick="updateLatestAudio(true)" aria-label="刷新当前音频"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h-6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
+                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <audio id="latestAudioPreview" controls style="width: 90%;">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div id="latestAudioName" style="margin-top: 10px; font-size: 0.7em; word-break: break-all;"></div>
+                </div>
             </div>
         </div>
         <div class="grid-item item-9">
@@ -168,6 +172,9 @@
             </div>
             <div class="grid-content">
                 <h2>Sector9</h2>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; opacity: 0.6;">
+                    RESERVED SLOT
+                </div>
             </div>
         </div>
         <div class="grid-item item-10">
@@ -175,12 +182,9 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">Sector10</a> <button type="button" class="inline-refresh-btn" onclick="updateLatestAudio(true)" aria-label="刷新当前音频"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
-                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                    <audio id="latestAudioPreview" controls style="width: 90%;">
-                        Your browser does not support the audio element.
-                    </audio>
-                    <div id="latestAudioName" style="margin-top: 10px; font-size: 0.7em; word-break: break-all;"></div>
+                <h2>Sector10</h2>
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; opacity: 0.4;">
+                    RESERVED
                 </div>
             </div>
         </div>
@@ -406,6 +410,11 @@
         </div>
     </div>
 
+    <div class="page-nav-bar">
+        <div class="page-nav-zone page-nav-prev">◀ PREV</div>
+        <div class="page-nav-zone page-nav-next">NEXT ▶</div>
+    </div>
+
     <script>
         // Fullscreen Logic
         function goFullscreen(elem) {
@@ -447,8 +456,8 @@
             goToPage(currentPage + 1);
         }
 
-        document.querySelector('.page-nav-left').addEventListener('click', goPrevPage);
-        document.querySelector('.page-nav-right').addEventListener('click', goNextPage);
+        document.querySelector('.page-nav-prev').addEventListener('click', goPrevPage);
+        document.querySelector('.page-nav-next').addEventListener('click', goNextPage);
 
         document.addEventListener('touchstart', function (e) {
             if (e.touches.length === 1) {
