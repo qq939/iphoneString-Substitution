@@ -1049,11 +1049,9 @@ def monitor_group_task(group_id):
                 all_done = False
             
         if all_done:
-            # Video Swap Logic
+            print(f"【转场】检测到组{group_id}所有ComfyUI子任务结束，开始拼接+上传OBS")
             print(f"Group {group_id} all tasks done. Concatenating...")
-            # Concatenate videos
             try:
-                # Sort by segment index
                 sorted_tasks = sorted(group_data['tasks'], key=lambda x: x['segment_index'])
                 video_paths = []
                 for t in sorted_tasks:
@@ -1064,40 +1062,32 @@ def monitor_group_task(group_id):
                     output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
                     output_path = os.path.join(UPLOAD_FOLDER, output_filename)
                     
-                    # Temp concatenated video (silent)
                     temp_concat_path = os.path.join(UPLOAD_FOLDER, f"temp_concat_{group_id}.mp4")
                     ffmpeg_utils.concatenate_videos(video_paths, temp_concat_path)
                     
-                    # Merge audio back
                     audio_path = group_data.get('audio_path')
                     if audio_path and os.path.exists(audio_path):
                         try:
-                            # Merge audio with loop enabled if needed
-                            # Our merge_audio_video with loop_audio=True will loop it
                             ffmpeg_utils.merge_audio_video(temp_concat_path, audio_path, output_path, loop_audio=True)
                             print(f"Merged audio from {audio_path}")
                             
-                            # Remove temp concat
                             if os.path.exists(temp_concat_path):
                                 os.remove(temp_concat_path)
                         except Exception as e:
                             print(f"Failed to merge audio: {e}")
-                            # If merge fails, just use the silent video? 
-                            # Or maybe move temp to output
                             if os.path.exists(temp_concat_path):
                                 shutil.move(temp_concat_path, output_path)
                     else:
-                        # No audio, just move temp to output
                         if os.path.exists(temp_concat_path):
                             shutil.move(temp_concat_path, output_path)
                     
-                    # Upload to OBS
                     print(f"Uploading {output_path} to OBS...")
                     obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
                     
                     if obs_url:
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
+                        print(f"【转场】组{group_id}转场流程完成，生成并上传all.mp4: {output_filename}")
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
@@ -1127,6 +1117,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
+        print(f"【转场】创建新的转场任务组，group_id={group_id}")
         group_data = {
             "status": "processing",
             "tasks": [],
@@ -1139,6 +1130,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         TASKS_STORE[group_id] = group_data
 
     index = len(group_data.get("transition_videos", []))
+    print(f"【转场】收到转场视频上传，group_id={group_id}，当前索引={index}")
 
     original_filename = file_storage.filename or f"transition_{group_id}_{index}.mp4"
     raw_path = os.path.join(UPLOAD_FOLDER, f"raw_transition_{group_id}_{index}.mp4")
@@ -1146,6 +1138,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     preprocessed_path = os.path.join(UPLOAD_FOLDER, f"transition_{group_id}_{index}.mp4")
     ffmpeg_utils.resize_video(raw_path, preprocessed_path, 640, 16)
+    print(
+        f"【转场】已预处理转场视频为640x640,16fps，原始文件={raw_path}，输出文件={preprocessed_path}"
+    )
 
     info = ffmpeg_utils.get_video_info(preprocessed_path)
     duration = info.get("duration", 0) if isinstance(info, dict) else 0
@@ -1154,6 +1149,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     group_data.setdefault("transition_videos", []).append(
         {"index": index, "path": preprocessed_path, "duration": duration, "name": original_filename}
+    )
+    print(
+        f"【转场】已将视频追加到转场列表，当前数量={len(group_data['transition_videos'])}"
     )
 
     if os.path.exists(raw_path):
@@ -1178,6 +1176,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         offset = prev_duration - 1.0 / 16.0
         if offset < 0:
             offset = 0
+        print(f"【转场】准备生成第{index}段转场，提取前后视频关键帧")
 
         start_image_path = os.path.join(
             UPLOAD_FOLDER, f"transition_{group_id}_{index - 1}_end.png"
@@ -1188,6 +1187,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
         ffmpeg_utils.extract_frame(prev_video["path"], start_image_path, offset)
         ffmpeg_utils.extract_frame(preprocessed_path, end_image_path, 0)
+        print(
+            f"【转场】已提取前一段末帧和当前段首帧，路径: {start_image_path}, {end_image_path}"
+        )
 
         start_upload = comfy_utils.client.upload_file(start_image_path)
         end_upload = comfy_utils.client.upload_file(end_image_path)
@@ -1205,6 +1207,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         )
         if not prompt_id:
             raise Exception(error or "Failed to queue transition workflow")
+        print(
+            f"【转场】提交ComfyUI收尾帧工作流成功，prompt_id={prompt_id}，server={server_address}"
+        )
 
         group_data["tasks"].append(
             {
