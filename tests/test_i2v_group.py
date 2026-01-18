@@ -76,7 +76,7 @@ def test_monitor_i2v_group_respects_global_timeout_and_merges(mock_upload_obs, m
     base_time = 1_000_000.0
     mock_time.side_effect = [
         base_time,
-        base_time + app.BACKEND_TASK_TIMEOUT_SECONDS + 1,
+        base_time + app.WAI_OVERTIME_SECONDS + 1,
     ]
     group_id = 'i2v_group'
     app.TASKS_STORE[group_id] = {

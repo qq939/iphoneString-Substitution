@@ -36,7 +36,7 @@ def test_app_globals_exist_and_types():
         assert isinstance(app.COMFY_STATUS, dict)
         assert isinstance(app.TASKS_STORE, dict)
         assert isinstance(app.AUDIO_TASKS, dict)
-        assert hasattr(app, "BACKEND_TASK_TIMEOUT_SECONDS")
+        assert hasattr(app, "WAI_OVERTIME_SECONDS")
         assert hasattr(app, "BACKEND_POLL_INTERVAL_SECONDS")
 
 
@@ -69,8 +69,7 @@ def test_sector8_and_9_have_content():
 def test_wait_overtime_global_param_exists():
     with timeout_scope(5):
         import app
-        assert hasattr(app, "WAIT_OVERTIME_SECONDS")
-        assert app.WAIT_OVERTIME_SECONDS == app.BACKEND_TASK_TIMEOUT_SECONDS
+        assert hasattr(app, "WAI_OVERTIME_SECONDS")
 
 
 def test_each_page_has_16_sectors_and_total_32():

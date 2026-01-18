@@ -74,7 +74,7 @@ def test_monitor_audio_task_stops_after_global_timeout(mock_time, mock_sleep):
             'url': None,
             'input_video_path': None,
             'server': None,
-            'created_at': now - (app.BACKEND_TASK_TIMEOUT_SECONDS + 1),
+            'created_at': now - (app.WAI_OVERTIME_SECONDS + 1),
         }
 
     with patch('app.comfy_utils.check_status', return_value=('PENDING', None)):

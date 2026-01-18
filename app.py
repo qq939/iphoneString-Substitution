@@ -77,8 +77,7 @@ TASKS_STORE = {}  # Used in: upload_and_cut, generate_i2v_group, monitor_group_t
 AUDIO_TASKS = {}  # Used in: upload_audio, check_audio_status, process_audio_result
 AUDIO_LOCK = threading.Lock()  # Used in: concurrent audio task state protection
 
-WAIT_OVERTIME_SECONDS = 6 * 60 * 60  # wait overtime=6小时，用于转场组等待第二个视频及各类后台任务超时控制（monitor_group_task 1006行, monitor_i2v_group 1243行, monitor_audio_task 876行, 数字人任务 741行等）
-BACKEND_TASK_TIMEOUT_SECONDS = WAIT_OVERTIME_SECONDS  # 保持兼容旧逻辑，所有使用该常量的地方共享同一个wait overtime参数
+WAI_OVERTIME_SECONDS = 6 * 60 * 60  # wai overtime=6小时，用于转场组等待第二个视频及各类后台任务超时控制（monitor_group_task 1006行, monitor_i2v_group 1243行, monitor_audio_task 876行, 数字人任务 741行等）
 BACKEND_POLL_INTERVAL_SECONDS = 15  # Used in: monitor_group_task polling interval
 
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
@@ -739,7 +738,7 @@ def process_digital_human_video(audio_path, input_video_path=None):
         
         while True:
             try:
-                if time.time() - start_time > BACKEND_TASK_TIMEOUT_SECONDS:
+                if time.time() - start_time > WAI_OVERTIME_SECONDS:
                     print("Digital human task timed out after 6 hours")
                     break
                 
@@ -874,7 +873,7 @@ def monitor_audio_task(prompt_id):
             task_data = AUDIO_TASKS[prompt_id]
             status = task_data['status']
             created_at = task_data.get('created_at')
-            if created_at is not None and time.time() - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
+            if created_at is not None and time.time() - created_at > WAI_OVERTIME_SECONDS:
                 AUDIO_TASKS[prompt_id]['status'] = 'failed'
                 AUDIO_TASKS[prompt_id]['error'] = 'Timeout: audio task exceeded 6 hours'
                 print(f"Audio task {prompt_id} timed out after 6 hours")
@@ -1011,16 +1010,16 @@ def monitor_group_task(group_id):
         if created_at is not None:
             if workflow_type == 'transition' and transition_videos is not None:
                 video_count = len(transition_videos)
-                if video_count < 2 and now - created_at > WAIT_OVERTIME_SECONDS:
+                if video_count < 2 and now - created_at > WAI_OVERTIME_SECONDS:
                     group_data['status'] = 'failed'
-                    group_data['error'] = 'Timeout: wait overtime for second transition video exceeded'
-                    print(f"Group {group_id} timed out waiting for second transition video after {WAIT_OVERTIME_SECONDS} seconds")
+                    group_data['error'] = 'Timeout: wai overtime for second transition video exceeded'
+                    print(f"Group {group_id} timed out waiting for second transition video after {WAI_OVERTIME_SECONDS} seconds")
                     break
             else:
-                if now - created_at > WAIT_OVERTIME_SECONDS:
+                if now - created_at > WAI_OVERTIME_SECONDS:
                     group_data['status'] = 'failed'
-                    group_data['error'] = 'Timeout: group exceeded wait overtime'
-                    print(f"Group {group_id} timed out after {WAIT_OVERTIME_SECONDS} seconds")
+                    group_data['error'] = 'Timeout: group exceeded wai overtime'
+                    print(f"Group {group_id} timed out after {WAI_OVERTIME_SECONDS} seconds")
                     break
 
         all_done = True
@@ -1258,7 +1257,7 @@ def monitor_i2v_group(group_id):
     while True:
         now = time.time()
         created_at = group_data.get('created_at')
-        if created_at is not None and now - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
+        if created_at is not None and now - created_at > WAI_OVERTIME_SECONDS:
             group_data['status'] = 'failed'
             break
         tasks = group_data.get('tasks', [])

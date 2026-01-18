@@ -74,7 +74,7 @@ class TestNoMoviePy(unittest.TestCase):
                     'result_path': None
                 }
             ],
-            'created_at': now - (app_module.WAIT_OVERTIME_SECONDS + 1),
+            'created_at': now - (app_module.WAI_OVERTIME_SECONDS + 1),
             'audio_path': None,
             'workflow_type': 'real'
         }
@@ -105,7 +105,7 @@ class TestNoMoviePy(unittest.TestCase):
                     'result_path': None
                 }
             ],
-            'created_at': now - (app_module.WAIT_OVERTIME_SECONDS + 1),
+            'created_at': now - (app_module.WAI_OVERTIME_SECONDS + 1),
             'audio_path': None,
             'workflow_type': 'transition',
             'transition_videos': [
