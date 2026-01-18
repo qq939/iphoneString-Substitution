@@ -322,7 +322,6 @@ def cancel_job(prompt_id):
 
 def adjust_segment_length(workflow, segment_duration):
     try:
-        # 新版 WanVaceToVideo 工作流（视频换人2video_wan_vace_14B_v2v.json）
         if "49" in workflow and workflow.get("49", {}).get("class_type") == "WanVaceToVideo":
             fps = 16
             node_id_video = "68"
@@ -338,7 +337,6 @@ def adjust_segment_length(workflow, segment_duration):
             if "49" in workflow and "inputs" in workflow["49"]:
                 workflow["49"]["inputs"]["length"] = target
         else:
-            # 旧版 WanAnimate 工作流（视频换人video_wan2_2_14B_animate.json）
             fps = 16
             node_id_video = "232:15"
             if (
@@ -396,11 +394,11 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
         if prompt_text and "21" in workflow: workflow["21"]["inputs"]["text"] = prompt_text
         if segment_duration is not None:
             workflow = adjust_segment_length(workflow, segment_duration)
-        # Randomize seed
-        seed = random.randint(1, 1000000000000000)
-        for node_id in ["232:63", "242:91", "64"]:
-            if node_id in workflow and "inputs" in workflow[node_id] and "seed" in workflow[node_id]["inputs"]:
-                workflow[node_id]["inputs"]["seed"] = seed
+        if workflow_type != 'real':
+            seed = random.randint(1, 1000000000000000)
+            for node_id in ["232:63", "242:91", "64"]:
+                if node_id in workflow and "inputs" in workflow[node_id] and "seed" in workflow[node_id]["inputs"]:
+                    workflow[node_id]["inputs"]["seed"] = seed
             
         prompt_id, server_address = client.queue_prompt(workflow)
         return (prompt_id, server_address, None) if prompt_id else (None, None, "Failed to queue prompt")

@@ -2,6 +2,9 @@ import pytest
 from unittest.mock import MagicMock, patch
 import io
 import os
+import sys
+
+sys.path.append(os.getcwd())
 import app
 
 @pytest.fixture

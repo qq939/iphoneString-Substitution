@@ -15,7 +15,7 @@ class TestNoMoviePy(unittest.TestCase):
 
     @patch('app.ffmpeg_utils')
     @patch('app.comfy_utils.client')
-    def test_upload_and_cut_uses_ffmpeg(self, mock_comfy, mock_ffmpeg):
+    def test_upload_and_cut_uses_ffmpeg_real_no_resize(self, mock_comfy, mock_ffmpeg):
         # Mock ffmpeg_utils functions
         mock_ffmpeg.get_video_info.return_value = {'duration': 10.0, 'width': 100, 'height': 100, 'has_audio': True}
         
@@ -42,14 +42,9 @@ class TestNoMoviePy(unittest.TestCase):
                     if response.status_code != 200:
                         print(f"Response error: {response.data}")
             
-            # Check if ffmpeg_utils functions were called
-            # get_video_info is called for audio extraction check and after resize
             self.assertTrue(mock_ffmpeg.get_video_info.called)
-            # extract_audio is called because has_audio=True
             self.assertTrue(mock_ffmpeg.extract_audio.called)
-            # resize_video is called
-            self.assertTrue(mock_ffmpeg.resize_video.called)
-            # cut_video is called for segments
+            self.assertFalse(mock_ffmpeg.resize_video.called)
             self.assertTrue(mock_ffmpeg.cut_video.called)
 
     @patch('app.ffmpeg_utils')

@@ -1254,15 +1254,18 @@ def upload_and_cut():
     }
     
     try:
-        # Preprocessing: Resize and set FPS
-        resized_video_path = os.path.join(UPLOAD_FOLDER, f"resized_{group_id}.mp4")
-        try:
-             ffmpeg_utils.resize_video(file_path, resized_video_path)
-        except Exception as e:
-             print(f"FFmpeg resize failed: {e}. Falling back to original size.")
-             shutil.copy(file_path, resized_video_path)
+        resized_video_path = None
+        segment_source_path = file_path
+        if workflow_type == 'anime':
+            resized_video_path = os.path.join(UPLOAD_FOLDER, f"resized_{group_id}.mp4")
+            try:
+                ffmpeg_utils.resize_video(file_path, resized_video_path)
+            except Exception as e:
+                print(f"FFmpeg resize failed: {e}. Falling back to original size.")
+                shutil.copy(file_path, resized_video_path)
+            segment_source_path = resized_video_path
         
-        info = ffmpeg_utils.get_video_info(resized_video_path)
+        info = ffmpeg_utils.get_video_info(segment_source_path)
         duration = info.get('duration', 0)
         fps = 20 # Target FPS (ffmpeg command handles this if we add -r)
         
@@ -1281,8 +1284,7 @@ def upload_and_cut():
             segment_filename = f"segment_{group_id}_{i}.mp4"
             segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
             
-            # Create subclip
-            ffmpeg_utils.cut_video(resized_video_path, segment_path, start_time, end_time)
+            ffmpeg_utils.cut_video(segment_source_path, segment_path, start_time, end_time)
             
             # Upload files to ComfyUI
             comfy_seg = comfy_utils.client.upload_file(segment_path)
@@ -1312,7 +1314,7 @@ def upload_and_cut():
             else:
                 TASKS_STORE[group_id]['status'] = 'failed'
                 TASKS_STORE[group_id]['error'] = f"Failed to submit segment {i}: {error}"
-                if os.path.exists(resized_video_path):
+                if resized_video_path and os.path.exists(resized_video_path):
                     os.remove(resized_video_path)
                 return jsonify({'error': f"Failed to submit segment {i}: {error}"}), 500
             
@@ -1320,7 +1322,7 @@ def upload_and_cut():
             if os.path.exists(segment_path):
                 os.remove(segment_path)
                 
-        if os.path.exists(resized_video_path):
+        if resized_video_path and os.path.exists(resized_video_path):
             os.remove(resized_video_path)
             
         # Clean up original file
@@ -1348,7 +1350,7 @@ def upload_and_cut():
             os.remove(file_path)
         if 'character_path' in locals() and os.path.exists(character_path):
             os.remove(character_path)
-        if 'resized_video_path' in locals() and os.path.exists(resized_video_path):
+        if 'resized_video_path' in locals() and resized_video_path and os.path.exists(resized_video_path):
             os.remove(resized_video_path)
             
         TASKS_STORE[group_id]['status'] = 'failed'
