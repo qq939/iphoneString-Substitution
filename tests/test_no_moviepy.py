@@ -85,6 +85,63 @@ class TestNoMoviePy(unittest.TestCase):
         self.assertEqual(TASKS_STORE[group_id]['status'], 'failed')
         self.assertIn('timeout', TASKS_STORE[group_id].get('error', '').lower())
 
+    @patch('app.time.sleep', return_value=None)
+    @patch('app.time.time')
+    def test_monitor_group_task_partial_failure_concatenates_success_segments(self, mock_time, mock_sleep):
+        import app as app_module
+        from app import monitor_group_task, TASKS_STORE, UPLOAD_FOLDER
+        now = 1_000_000.0
+        mock_time.return_value = now
+        group_id = 'test_group_partial_failure'
+        seg1_path = os.path.join(UPLOAD_FOLDER, 'seg1.mp4')
+        audio_path = os.path.join(UPLOAD_FOLDER, 'audio.wav')
+        TASKS_STORE[group_id] = {
+            'status': 'processing',
+            'tasks': [
+                {
+                    'task_id': 't1',
+                    'server': None,
+                    'status': 'pending',
+                    'segment_index': 0,
+                    'result_path': None
+                },
+                {
+                    'task_id': 't2',
+                    'server': None,
+                    'status': 'pending',
+                    'segment_index': 1,
+                    'result_path': None
+                }
+            ],
+            'created_at': now,
+            'audio_path': audio_path,
+            'workflow_type': 'real'
+        }
+        with patch('app.comfy_utils.check_status') as mock_check_status, \
+             patch('app.comfy_utils.download_result', return_value=seg1_path) as mock_download, \
+             patch('app.ffmpeg_utils.concatenate_videos') as mock_concat, \
+             patch('app.ffmpeg_utils.merge_audio_video') as mock_merge, \
+             patch('app.obs_utils.upload_file', return_value='http://example.com/final.mp4') as mock_upload, \
+             patch('app.os.path.exists', return_value=True), \
+             patch('app.os.remove'), \
+             patch('app.shutil.move'):
+            mock_check_status.side_effect = [
+                ('SUCCEEDED', {'filename': 'seg1.mp4', 'subfolder': '', 'type': 'output'}),
+                ('FAILED', 'some error'),
+            ]
+            monitor_group_task(group_id)
+        group = TASKS_STORE[group_id]
+        self.assertEqual(group['status'], 'completed')
+        self.assertEqual(group.get('final_url'), 'http://example.com/final.mp4')
+        mock_check_status.assert_called()
+        mock_download.assert_called_once()
+        mock_concat.assert_called_once()
+        args, kwargs = mock_concat.call_args
+        video_list = args[0]
+        self.assertEqual(video_list, [seg1_path])
+        self.assertTrue(any(t['status'] == 'completed' for t in group['tasks']))
+        self.assertTrue(any(t['status'] == 'failed' for t in group['tasks']))
+
     def test_backend_poll_interval_at_least_15_seconds(self):
         import app as app_module
         self.assertTrue(hasattr(app_module, 'BACKEND_POLL_INTERVAL_SECONDS'))

@@ -537,7 +537,16 @@ def upload_audio():
             
         workflow = modify_audio_workflow(workflow, text, uploaded_filename, emotions)
         
-        prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
+        queue_result = comfy_utils.client.queue_prompt(workflow)
+        if isinstance(queue_result, tuple):
+            if len(queue_result) == 2:
+                prompt_id, server_address = queue_result
+            elif len(queue_result) >= 3:
+                prompt_id, server_address = queue_result[0], queue_result[1]
+            else:
+                prompt_id, server_address = queue_result[0] if queue_result else None, None
+        else:
+            prompt_id, server_address = queue_result, None
         
         if prompt_id:
             task_info = {
@@ -1005,15 +1014,10 @@ def monitor_group_task(group_id):
             break
 
         all_done = True
-        any_failed = False
         
         # Check each task
         for task in group_data['tasks']:
-            if task['status'] == 'completed':
-                continue
-            
-            if task['status'] == 'failed':
-                any_failed = True
+            if task['status'] in ['completed', 'failed']:
                 continue
                 
             # Check status from ComfyUI
@@ -1031,16 +1035,13 @@ def monitor_group_task(group_id):
                         else:
                             task['status'] = 'failed'
                             task['error'] = 'Download failed'
-                            any_failed = True
                     else:
                         task['status'] = 'failed'
                         task['error'] = 'Invalid result format'
-                        any_failed = True
                         
                 elif status == 'FAILED':
                     task['status'] = 'failed'
                     task['error'] = str(result)
-                    any_failed = True
                 else:
                     # PENDING or RUNNING
                     all_done = False
@@ -1048,16 +1049,7 @@ def monitor_group_task(group_id):
                 print(f"Error checking task {task['task_id']}: {e}")
                 # Don't mark as failed immediately, maybe network glitch?
                 # But for now let's not block forever
-                # task['status'] = 'failed'
-                # task['error'] = str(e)
-                # any_failed = True
                 all_done = False
-        
-        if any_failed:
-            group_data['status'] = 'failed'
-            group_data['error'] = 'One or more tasks failed'
-            print(f"Group {group_id} failed")
-            break
             
         if all_done:
             # Video Swap Logic
