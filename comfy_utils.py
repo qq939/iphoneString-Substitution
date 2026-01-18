@@ -110,6 +110,23 @@ class ComfyUIClient:
         """
         return self.check_connection(timeout=5)
 
+    def get_object_info(self, node_class=None):
+        """
+        Gets object info (node definitions) from the server.
+        If node_class is provided, returns info only for that class.
+        """
+        try:
+            url = f"{self.base_url}/object_info"
+            if node_class:
+                url = f"{url}/{node_class}"
+            
+            with urllib.request.urlopen(url, timeout=10) as response:
+                data = json.loads(response.read())
+                return data
+        except Exception as e:
+            logger.error(f"Get object info failed: {e}")
+            return None
+
     def queue_prompt(self, prompt):
         """
         Sends the workflow to the server.
@@ -125,10 +142,30 @@ class ComfyUIClient:
                 if 'prompt_id' in response_data:
                     return response_data['prompt_id'], self.server_address
         except Exception as e:
+            error_msg = str(e)
+            error_body = ""
             if hasattr(e, 'read'):
                 try:
                     error_body = e.read().decode('utf-8')
                     logger.warning(f"Failed to queue prompt. Response: {error_body}")
+                    
+                    # Try to parse error to give helpful hints
+                    try:
+                        err_json = json.loads(error_body)
+                        node_errors = err_json.get('node_errors', {})
+                        for node_id, errors in node_errors.items():
+                            class_type = errors.get('class_type')
+                            for err in errors.get('errors', []):
+                                if err.get('type') == 'value_not_in_list' and class_type == 'UNETLoader':
+                                    logger.info("Attempting to fetch available UNET models...")
+                                    info = self.get_object_info('UNETLoader')
+                                    if info:
+                                        # structure: {'UNETLoader': {'input': {'required': {'unet_name': [['model1', 'model2'], ...]}}}}
+                                        models = info.get('UNETLoader', {}).get('input', {}).get('required', {}).get('unet_name', [[]])[0]
+                                        logger.info(f"Available UNET models on server ({len(models)}): {models}")
+                    except:
+                        pass
+                        
                 except:
                     pass
             logger.warning(f"Failed to queue prompt: {e}")
