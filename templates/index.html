@@ -693,7 +693,45 @@
             }
         }
 
-        var transitionGroupId = null;
+        // Transition Group Logic with SessionStorage
+        function getGroupId() {
+            return sessionStorage.getItem('transition_group_id');
+        }
+
+        function setGroupId(id) {
+            sessionStorage.setItem('transition_group_id', id);
+            updateGroupIdDisplay();
+        }
+
+        function updateGroupIdDisplay() {
+            var id = getGroupId();
+            // Update display in all transition grids
+            ['13', '14', '15', '16'].forEach(function(num) {
+                var container = document.querySelector('.grid-item.item-' + num + ' .grid-content');
+                if (container) {
+                    var display = document.getElementById('groupIdDisplay-' + num);
+                    if (!display) {
+                        display = document.createElement('div');
+                        display.id = 'groupIdDisplay-' + num;
+                        display.style.fontSize = '0.6em';
+                        display.style.color = '#ffff00';
+                        display.style.marginBottom = '5px';
+                        // Insert after h2
+                        var h2 = container.querySelector('h2');
+                        if (h2 && h2.nextSibling) {
+                            container.insertBefore(display, h2.nextSibling);
+                        } else {
+                            container.appendChild(display);
+                        }
+                    }
+                    display.innerText = 'GID: ' + (id ? id.substring(0, 8) + '...' : 'None');
+                }
+            });
+        }
+
+        // Initialize display on load
+        document.addEventListener('DOMContentLoaded', updateGroupIdDisplay);
+
         var transitionPollTimer = null;
 
         function setupTransitionForm(formId, statusId) {
@@ -704,9 +742,15 @@
                 e.preventDefault();
                 var btn = form.querySelector('button[type="submit"]');
                 var formData = new FormData(form);
-                if (transitionGroupId) {
-                    formData.append('group_id', transitionGroupId);
+                
+                var currentGroupId = getGroupId();
+                if (currentGroupId) {
+                    console.log('Appending Group ID:', currentGroupId);
+                    formData.append('group_id', currentGroupId);
+                } else {
+                    console.log('No Group ID found, starting new group');
                 }
+
                 statusDiv.innerText = 'UPLOADING...';
                 if (btn) btn.disabled = true;
                 try {
@@ -717,10 +761,10 @@
                     var data = await resp.json();
                     if (resp.ok) {
                         if (data.group_id) {
-                            transitionGroupId = data.group_id;
+                            setGroupId(data.group_id);
                         }
                         statusDiv.innerText = 'SUBMITTED.';
-                        if (transitionGroupId && !transitionPollTimer) {
+                        if (getGroupId() && !transitionPollTimer) {
                             startTransitionStatusPolling();
                         }
                     } else {
@@ -735,27 +779,47 @@
         }
 
         function startTransitionStatusPolling() {
-            if (!transitionGroupId) return;
+            var gid = getGroupId();
+            if (!gid) return;
             if (transitionPollTimer) return;
-            var statusDiv15 = document.getElementById('transitionStatus13');
+            var statusDivs = [
+                document.getElementById('transitionStatus13'),
+                document.getElementById('transitionStatus14'),
+                document.getElementById('transitionStatus15'),
+                document.getElementById('transitionStatus16')
+            ];
+            
             transitionPollTimer = setInterval(function () {
-                fetch('/check_group_status/' + transitionGroupId)
+                var currentGid = getGroupId();
+                if (!currentGid) {
+                    clearInterval(transitionPollTimer);
+                    transitionPollTimer = null;
+                    return;
+                }
+
+                fetch('/check_group_status/' + currentGid)
                     .then(function (r) { return r.json(); })
                     .then(function (s) {
-                        if (!statusDiv15) return;
-                        if (s.status === 'processing') {
-                            statusDiv15.innerText = 'TRANSITION PROCESSING... [' + (s.progress || '') + ']';
-                        } else if (s.status === 'completed') {
-                            clearInterval(transitionPollTimer);
-                            transitionPollTimer = null;
-                            statusDiv15.innerText = 'TRANSITION COMPLETED.';
-                            if (s.final_url) {
-                                updateLatestVideo(true);
+                        statusDivs.forEach(function(div) {
+                            if (!div) return;
+                            if (s.status === 'processing') {
+                                div.innerText = 'TRANSITION PROCESSING... [' + (s.progress || '') + ']';
+                            } else if (s.status === 'completed') {
+                                // Don't clear timer immediately if we want to keep showing completed?
+                                // But maybe we should stop polling.
+                                // Let's keep showing completed.
+                                div.innerText = 'TRANSITION COMPLETED.';
+                            } else if (s.status === 'failed') {
+                                div.innerText = 'TRANSITION FAILED: ' + (s.error || 'Unknown');
                             }
-                        } else if (s.status === 'failed') {
-                            clearInterval(transitionPollTimer);
-                            transitionPollTimer = null;
-                            statusDiv15.innerText = 'TRANSITION FAILED: ' + (s.error || 'Unknown');
+                        });
+
+                        if (s.status === 'completed' || s.status === 'failed') {
+                             clearInterval(transitionPollTimer);
+                             transitionPollTimer = null;
+                             if (s.status === 'completed' && s.final_url) {
+                                updateLatestVideo(true);
+                             }
                         }
                     })
                     .catch(function () {
