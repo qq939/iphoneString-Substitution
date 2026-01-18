@@ -74,7 +74,7 @@ class TestNoMoviePy(unittest.TestCase):
                     'result_path': None
                 }
             ],
-            'created_at': now - (6 * 60 * 60 + 1),
+            'created_at': now - (app_module.WAIT_OVERTIME_SECONDS + 1),
             'audio_path': None,
             'workflow_type': 'real'
         }
@@ -84,6 +84,42 @@ class TestNoMoviePy(unittest.TestCase):
             monitor_group_task(group_id)
         self.assertEqual(TASKS_STORE[group_id]['status'], 'failed')
         self.assertIn('timeout', TASKS_STORE[group_id].get('error', '').lower())
+
+    @patch('app.time.sleep', return_value=None)
+    @patch('app.time.time')
+    def test_transition_group_waits_for_second_video_with_overtime(self, mock_time, mock_sleep):
+        import app as app_module
+        from app import monitor_group_task, TASKS_STORE
+
+        now = 1_000_000.0
+        mock_time.return_value = now
+        group_id = 'test_transition_wait'
+        TASKS_STORE[group_id] = {
+            'status': 'processing',
+            'tasks': [
+                {
+                    'task_id': 't1',
+                    'server': None,
+                    'status': 'pending',
+                    'segment_index': 0,
+                    'result_path': None
+                }
+            ],
+            'created_at': now - (app_module.WAIT_OVERTIME_SECONDS + 1),
+            'audio_path': None,
+            'workflow_type': 'transition',
+            'transition_videos': [
+                {'index': 0, 'path': '/tmp/v0.mp4', 'duration': 1.0, 'name': 'v0.mp4'}
+            ]
+        }
+
+        with patch('app.comfy_utils.check_status', return_value=('PENDING', None)), \
+             patch('app.ffmpeg_utils.concatenate_videos'), \
+             patch('app.obs_utils.upload_file', return_value='http://example.com/video.mp4'):
+            monitor_group_task(group_id)
+
+        self.assertEqual(TASKS_STORE[group_id]['status'], 'failed')
+        self.assertIn('wait overtime', TASKS_STORE[group_id].get('error', '').lower())
 
     @patch('app.time.sleep', return_value=None)
     @patch('app.time.time')

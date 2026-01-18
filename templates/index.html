@@ -17,10 +17,12 @@
                 <h2>字符替换</h2>
                 <div style="height: 40%;">
                     <form method="POST" action="/">
-                        <div class="input-group">
-                            <input type="text" name="text" placeholder=">_" autocomplete="off" autofocus>
-                            <button type="submit" name="action" value="add">+</button>
-                            <button type="submit" name="action" value="remove">-</button>
+                        <div class="input-group" style="display: flex; flex-direction: column; gap: 5px;">
+                            <input type="text" name="text" placeholder=">_" autocomplete="off" autofocus style="width: 100%;">
+                            <div style="display: flex; gap: 5px; width: 100%;">
+                                <button type="submit" name="action" value="add" style="flex: 1;">+</button>
+                                <button type="submit" name="action" value="remove" style="flex: 1;">-</button>
+                            </div>
                         </div>
                     </form>
                 </div>

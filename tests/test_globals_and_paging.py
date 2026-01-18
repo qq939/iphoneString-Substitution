@@ -66,6 +66,13 @@ def test_sector8_and_9_have_content():
         assert 'onclick="submitI2V(9)"' in content
 
 
+def test_wait_overtime_global_param_exists():
+    with timeout_scope(5):
+        import app
+        assert hasattr(app, "WAIT_OVERTIME_SECONDS")
+        assert app.WAIT_OVERTIME_SECONDS == app.BACKEND_TASK_TIMEOUT_SECONDS
+
+
 def test_each_page_has_16_sectors_and_total_32():
     with timeout_scope(5):
         base_dir = os.path.dirname(os.path.abspath(__file__))
