@@ -76,8 +76,7 @@ status_thread.start()
 TASKS_STORE = {}  # Used in: upload_and_cut, generate_i2v_group, monitor_group_task, _add_transition_video_to_group, check_group_status
 AUDIO_TASKS = {}  # Used in: upload_audio, check_audio_status, process_audio_result
 AUDIO_LOCK = threading.Lock()  # Used in: concurrent audio task state protection
-
-WAI_OVERTIME_SECONDS = 6 * 60 * 60  # wai overtime=6小时，用于转场组等待第二个视频及各类后台任务超时控制（monitor_group_task 1006行, monitor_i2v_group 1243行, monitor_audio_task 876行, 数字人任务 741行等）
+WAIT_OVERTIME_SECONDS = 6 * 60 * 60  # Used in: monitor_group_task timeout control
 BACKEND_POLL_INTERVAL_SECONDS = 15  # Used in: monitor_group_task polling interval
 
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
@@ -738,7 +737,7 @@ def process_digital_human_video(audio_path, input_video_path=None):
         
         while True:
             try:
-                if time.time() - start_time > WAI_OVERTIME_SECONDS:
+                if time.time() - start_time > BACKEND_TASK_TIMEOUT_SECONDS:
                     print("Digital human task timed out after 6 hours")
                     break
                 
@@ -873,7 +872,7 @@ def monitor_audio_task(prompt_id):
             task_data = AUDIO_TASKS[prompt_id]
             status = task_data['status']
             created_at = task_data.get('created_at')
-            if created_at is not None and time.time() - created_at > WAI_OVERTIME_SECONDS:
+            if created_at is not None and time.time() - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
                 AUDIO_TASKS[prompt_id]['status'] = 'failed'
                 AUDIO_TASKS[prompt_id]['error'] = 'Timeout: audio task exceeded 6 hours'
                 print(f"Audio task {prompt_id} timed out after 6 hours")
@@ -1004,23 +1003,11 @@ def monitor_group_task(group_id):
     while True:
         now = time.time()
         created_at = group_data.get('created_at')
-        workflow_type = group_data.get('workflow_type')
-        transition_videos = group_data.get('transition_videos') if workflow_type == 'transition' else None
-
-        if created_at is not None:
-            if workflow_type == 'transition' and transition_videos is not None:
-                video_count = len(transition_videos)
-                if video_count < 2 and now - created_at > WAI_OVERTIME_SECONDS:
-                    group_data['status'] = 'failed'
-                    group_data['error'] = 'Timeout: wai overtime for second transition video exceeded'
-                    print(f"Group {group_id} timed out waiting for second transition video after {WAI_OVERTIME_SECONDS} seconds")
-                    break
-            else:
-                if now - created_at > WAI_OVERTIME_SECONDS:
-                    group_data['status'] = 'failed'
-                    group_data['error'] = 'Timeout: group exceeded wai overtime'
-                    print(f"Group {group_id} timed out after {WAI_OVERTIME_SECONDS} seconds")
-                    break
+        if created_at is not None and now - created_at > WAIT_OVERTIME_SECONDS:
+            group_data['status'] = 'failed'
+            group_data['error'] = 'Timeout: group exceeded 6 hours'
+            print(f"Group {group_id} timed out after 6 hours")
+            break
 
         all_done = True
         
@@ -1041,7 +1028,6 @@ def monitor_group_task(group_id):
                         if local_path:
                             task['result_path'] = local_path
                             task['status'] = 'completed'
-                            print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
                         else:
                             task['status'] = 'failed'
                             task['error'] = 'Download failed'
@@ -1062,9 +1048,11 @@ def monitor_group_task(group_id):
                 all_done = False
             
         if all_done:
-            print(f"【转场】检测到组{group_id}所有ComfyUI子任务结束，开始拼接+上传OBS")
+            # Video Swap Logic
             print(f"Group {group_id} all tasks done. Concatenating...")
+            # Concatenate videos
             try:
+                # Sort by segment index
                 sorted_tasks = sorted(group_data['tasks'], key=lambda x: x['segment_index'])
                 video_paths = []
                 for t in sorted_tasks:
@@ -1075,32 +1063,40 @@ def monitor_group_task(group_id):
                     output_filename = datetime.now().strftime("%Y%m%d%H%M%Sall.mp4")
                     output_path = os.path.join(UPLOAD_FOLDER, output_filename)
                     
+                    # Temp concatenated video (silent)
                     temp_concat_path = os.path.join(UPLOAD_FOLDER, f"temp_concat_{group_id}.mp4")
                     ffmpeg_utils.concatenate_videos(video_paths, temp_concat_path)
                     
+                    # Merge audio back
                     audio_path = group_data.get('audio_path')
                     if audio_path and os.path.exists(audio_path):
                         try:
+                            # Merge audio with loop enabled if needed
+                            # Our merge_audio_video with loop_audio=True will loop it
                             ffmpeg_utils.merge_audio_video(temp_concat_path, audio_path, output_path, loop_audio=True)
                             print(f"Merged audio from {audio_path}")
                             
+                            # Remove temp concat
                             if os.path.exists(temp_concat_path):
                                 os.remove(temp_concat_path)
                         except Exception as e:
                             print(f"Failed to merge audio: {e}")
+                            # If merge fails, just use the silent video? 
+                            # Or maybe move temp to output
                             if os.path.exists(temp_concat_path):
                                 shutil.move(temp_concat_path, output_path)
                     else:
+                        # No audio, just move temp to output
                         if os.path.exists(temp_concat_path):
                             shutil.move(temp_concat_path, output_path)
                     
+                    # Upload to OBS
                     print(f"Uploading {output_path} to OBS...")
                     obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
                     
                     if obs_url:
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
-                        print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
@@ -1130,7 +1126,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
-        print(f"【转场】创建新的转场任务组，group_id={group_id}")
         group_data = {
             "status": "processing",
             "tasks": [],
@@ -1143,7 +1138,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         TASKS_STORE[group_id] = group_data
 
     index = len(group_data.get("transition_videos", []))
-    print(f"【转场】收到转场视频上传，group_id={group_id}，当前索引={index}")
 
     original_filename = file_storage.filename or f"transition_{group_id}_{index}.mp4"
     raw_path = os.path.join(UPLOAD_FOLDER, f"raw_transition_{group_id}_{index}.mp4")
@@ -1151,9 +1145,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     preprocessed_path = os.path.join(UPLOAD_FOLDER, f"transition_{group_id}_{index}.mp4")
     ffmpeg_utils.resize_video(raw_path, preprocessed_path, 640, 16)
-    print(
-        f"【转场】已预处理转场视频为640x640,16fps，原始文件={raw_path}，输出文件={preprocessed_path}"
-    )
 
     info = ffmpeg_utils.get_video_info(preprocessed_path)
     duration = info.get("duration", 0) if isinstance(info, dict) else 0
@@ -1162,9 +1153,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     group_data.setdefault("transition_videos", []).append(
         {"index": index, "path": preprocessed_path, "duration": duration, "name": original_filename}
-    )
-    print(
-        f"【转场】步骤1/6: 视频列表与滑动窗口初始化完成，group_id={group_id}，当前列表数量={len(group_data['transition_videos'])}"
     )
 
     if os.path.exists(raw_path):
@@ -1189,7 +1177,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         offset = prev_duration - 1.0 / 16.0
         if offset < 0:
             offset = 0
-        print(f"【转场】准备生成第{index}段转场，提取前后视频关键帧")
 
         start_image_path = os.path.join(
             UPLOAD_FOLDER, f"transition_{group_id}_{index - 1}_end.png"
@@ -1200,9 +1187,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
         ffmpeg_utils.extract_frame(prev_video["path"], start_image_path, offset)
         ffmpeg_utils.extract_frame(preprocessed_path, end_image_path, 0)
-        print(
-            f"【转场】步骤2/6: 首尾帧提取完成，路径: {start_image_path}, {end_image_path}"
-        )
 
         start_upload = comfy_utils.client.upload_file(start_image_path)
         end_upload = comfy_utils.client.upload_file(end_image_path)
@@ -1220,9 +1204,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         )
         if not prompt_id:
             raise Exception(error or "Failed to queue transition workflow")
-        print(
-            f"【转场】步骤3/6: ComfyUI任务配置与提交完成，prompt_id={prompt_id}，server={server_address}"
-        )
 
         group_data["tasks"].append(
             {
@@ -1249,9 +1230,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         thread.start()
         group_data["monitor_started"] = True
 
-    if index > 0:
-        print(f"【转场】步骤5/6: 滑动窗口递推执行完成，已为第{index}段转场任务完成初始化")
-
     return group_id
 
 def monitor_i2v_group(group_id):
@@ -1261,7 +1239,7 @@ def monitor_i2v_group(group_id):
     while True:
         now = time.time()
         created_at = group_data.get('created_at')
-        if created_at is not None and now - created_at > WAI_OVERTIME_SECONDS:
+        if created_at is not None and now - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
             group_data['status'] = 'failed'
             break
         tasks = group_data.get('tasks', [])
@@ -1278,7 +1256,6 @@ def monitor_i2v_group(group_id):
                         if local_path:
                             task['result_path'] = local_path
                             task['status'] = 'completed'
-                            print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
                         else:
                             task['status'] = 'failed'
                     else:
