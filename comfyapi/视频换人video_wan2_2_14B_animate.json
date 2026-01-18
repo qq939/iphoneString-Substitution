@@ -60,7 +60,7 @@
   },
   "10": {
     "inputs": {
-      "image": "character.png"
+      "image": "video_wan2_2_14B_animate_reference_image.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -238,8 +238,7 @@
   },
   "145": {
     "inputs": {
-      "file": "reference.mp4",
-      "video-preview": ""
+      "file": "video_wan2_2_14B_animate_original_video.mp4"
     },
     "class_type": "LoadVideo",
     "_meta": {
@@ -432,7 +431,7 @@
         "160",
         0
       ],
-      "length": 64,
+      "length": 77,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": 0,
@@ -519,7 +518,7 @@
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 0.4,
+      "denoise": 1,
       "model": [
         "60",
         0
@@ -601,7 +600,7 @@
         "159",
         0
       ],
-      "length": 64,
+      "length": 77,
       "batch_size": 1,
       "continue_motion_max_frames": 5,
       "video_frame_offset": [
@@ -678,7 +677,7 @@
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 0.4,
+      "denoise": 1,
       "model": [
         "60",
         0
