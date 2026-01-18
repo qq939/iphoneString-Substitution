@@ -1126,7 +1126,14 @@ def monitor_group_task(group_id):
         time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
 
 
-def _add_transition_video_to_group(file_storage, group_id=None):
+CHANNEL_TRANSITION_GROUPS = {
+    '13': None,
+    '14': None,
+    '15': None,
+    '16': None
+}
+
+def add_video_to_transition_group_core(file_path, original_filename, group_id=None):
     try:
         ensure_comfy_connection()
     except Exception as e:
@@ -1153,13 +1160,17 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         TASKS_STORE[group_id] = group_data
 
     index = len(group_data.get("transition_videos", []))
-    print(f"【转场】收到转场视频上传，group_id={group_id}，当前索引={index}")
+    print(f"【转场】收到转场视频，group_id={group_id}，当前索引={index}")
 
-    original_filename = file_storage.filename or f"transition_{group_id}_{index}.mp4"
-    raw_path = os.path.join(UPLOAD_FOLDER, f"raw_transition_{group_id}_{index}.mp4")
-    file_storage.save(raw_path)
-
+    # Use existing file path directly
+    raw_path = file_path
+    
     preprocessed_path = os.path.join(UPLOAD_FOLDER, f"transition_{group_id}_{index}.mp4")
+    
+    # Check if raw_path exists
+    if not os.path.exists(raw_path):
+        raise Exception(f"Video file not found: {raw_path}")
+
     ffmpeg_utils.resize_video(raw_path, preprocessed_path, 640, 16)
     print(
         f"【转场】已预处理转场视频为640x640,16fps，原始文件={raw_path}，输出文件={preprocessed_path}"
@@ -1176,12 +1187,6 @@ def _add_transition_video_to_group(file_storage, group_id=None):
     print(
         f"【转场】步骤1/6: 视频列表与滑动窗口初始化完成，group_id={group_id}，当前列表数量={len(group_data['transition_videos'])}"
     )
-
-    if os.path.exists(raw_path):
-        try:
-            os.remove(raw_path)
-        except OSError:
-            pass
 
     if index == 0:
         group_data["tasks"].append(
@@ -1269,6 +1274,25 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     return group_id
 
+def _add_transition_video_to_group(file_storage, group_id=None):
+    if group_id is None:
+        group_id = str(uuid.uuid4())
+        
+    unique_id = str(uuid.uuid4())
+    raw_path = os.path.join(UPLOAD_FOLDER, f"raw_upload_{unique_id}.mp4")
+    file_storage.save(raw_path)
+    
+    try:
+        return add_video_to_transition_group_core(raw_path, file_storage.filename, group_id)
+    finally:
+        if os.path.exists(raw_path):
+            try:
+                os.remove(raw_path)
+            except:
+                pass
+
+
+
 def monitor_i2v_group(group_id):
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
@@ -1318,6 +1342,55 @@ def monitor_i2v_group(group_id):
                     if obs_url:
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
+                        print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
+                        
+                        # Trigger automatic flow for Sectors 9, 10, 11, 12 -> 13, 14, 15, 16
+                        # Check if this group belongs to one of those sectors
+                        # We determine this by checking the segment_index of tasks
+                        
+                        target_channel = None
+                        for task in tasks:
+                            idx = task.get('segment_index')
+                            if idx == 0:
+                                target_channel = '13'
+                                break
+                            elif idx == 1:
+                                target_channel = '14'
+                                break
+                            elif idx == 2:
+                                target_channel = '15'
+                                break
+                            elif idx == 3:
+                                target_channel = '16'
+                                break
+                        
+                        if target_channel:
+                            print(f"【自动触发】检测到Sector任务完成，触发Sector{target_channel}流程")
+                            try:
+                                # Get or create persistent group ID for this channel
+                                channel_group_id = CHANNEL_TRANSITION_GROUPS.get(target_channel)
+                                
+                                # Check if group exists in store, if not, reset it
+                                if channel_group_id and channel_group_id not in TASKS_STORE:
+                                    channel_group_id = None
+                                
+                                # Add video to transition group
+                                # We use output_path which is the final concatenated video (or single video)
+                                # add_video_to_transition_group_core will resize it again, which is fine (safe).
+                                new_group_id = add_video_to_transition_group_core(
+                                    output_path, 
+                                    output_filename, 
+                                    channel_group_id
+                                )
+                                
+                                # Update persistent ID
+                                CHANNEL_TRANSITION_GROUPS[target_channel] = new_group_id
+                                
+                                print(f"【自动触发】已将视频添加到Sector{target_channel}转场组: {new_group_id}")
+                                
+                            except Exception as e:
+                                print(f"【自动触发】失败: {e}")
+                        
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
