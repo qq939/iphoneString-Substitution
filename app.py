@@ -1020,26 +1020,34 @@ def monitor_group_task(group_id):
             # Check status from ComfyUI
             try:
                 status, result = comfy_utils.check_status(task['task_id'], task.get('server'))
-                # print(f"Task {task['task_id']} status: {status}")
+                print(f"DEBUG: Task {task['task_id']} status={status}")
                 
                 if status == 'SUCCEEDED':
                     # Download result
                     if isinstance(result, dict):
-                        local_path = comfy_utils.download_result(result, UPLOAD_FOLDER, task.get('server'))
-                        if local_path:
-                            task['result_path'] = local_path
-                            task['status'] = 'completed'
-                            print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
-                        else:
+                        try:
+                            local_path = comfy_utils.download_result(result, UPLOAD_FOLDER, task.get('server'))
+                            if local_path:
+                                task['result_path'] = local_path
+                                task['status'] = 'completed'
+                                print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
+                            else:
+                                task['status'] = 'failed'
+                                task['error'] = 'Download failed (None returned)'
+                                print(f"DEBUG: Download returned None for {task['task_id']}")
+                        except Exception as e:
                             task['status'] = 'failed'
-                            task['error'] = 'Download failed'
+                            task['error'] = f'Download exception: {e}'
+                            print(f"DEBUG: Download exception for {task['task_id']}: {e}")
                     else:
                         task['status'] = 'failed'
                         task['error'] = 'Invalid result format'
+                        print(f"DEBUG: Invalid result format for {task['task_id']}")
                         
                 elif status == 'FAILED':
                     task['status'] = 'failed'
                     task['error'] = str(result)
+                    print(f"【转场】任务失败 task_id={task['task_id']}, error={task['error']}")
                 else:
                     # PENDING or RUNNING
                     all_done = False
@@ -1245,11 +1253,16 @@ def _add_transition_video_to_group(file_storage, group_id=None):
             }
         )
 
-    if not group_data.get("monitor_started"):
+    # Reset status to processing if we are adding more videos
+    group_data["status"] = "processing"
+
+    if not group_data.get("monitor_started") or (group_data.get("monitor_thread") and not group_data["monitor_thread"].is_alive()):
         thread = threading.Thread(target=monitor_group_task, args=(group_id,))
         thread.daemon = True
         thread.start()
         group_data["monitor_started"] = True
+        group_data["monitor_thread"] = thread
+        print(f"Started/Restarted monitor thread for group {group_id}")
 
     if index > 0:
         print(f"【转场】步骤5/6: 滑动窗口递推执行完成，已为第{index}段转场任务完成初始化")

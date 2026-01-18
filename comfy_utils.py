@@ -63,7 +63,7 @@ class ComfyUIClient:
                 
                 url = f"{server.rstrip('/')}/object_info"
                 headers = {'User-Agent': 'Mozilla/5.0'}
-                response = requests.get(url, timeout=5, headers=headers)
+                response = requests.get(url, timeout=30, headers=headers)
                 if response.status_code == 200:
                     return server
             except:
@@ -108,7 +108,7 @@ class ComfyUIClient:
         """
         Ensures we have a valid connection.
         """
-        return self.check_connection(timeout=5)
+        return self.check_connection(timeout=10)
 
     def get_object_info(self, node_class=None):
         """
@@ -120,7 +120,7 @@ class ComfyUIClient:
             if node_class:
                 url = f"{url}/{node_class}"
             
-            with urllib.request.urlopen(url, timeout=10) as response:
+            with urllib.request.urlopen(url, timeout=60) as response:
                 data = json.loads(response.read())
                 return data
         except Exception as e:
@@ -137,7 +137,7 @@ class ComfyUIClient:
             
             url = f"{self.base_url}/prompt"
             req = urllib.request.Request(url, data=data)
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=60) as response:
                 response_data = json.loads(response.read())
                 if 'prompt_id' in response_data:
                     return response_data['prompt_id'], self.server_address
@@ -189,32 +189,25 @@ class ComfyUIClient:
             pass
         return None
 
-    def upload_file(self, file_path, subfolder="", overwrite=False):
+    def upload_file(self, file_path, subfolder="", overwrite=True):
         """
-        Uploads file to the server.
+        Uploads a file to ComfyUI.
         """
-        if not os.path.exists(file_path):
-            logger.error(f"File not found: {file_path}")
-            raise FileNotFoundError(f"File not found: {file_path}")
-
         try:
             url = f"{self.base_url}/upload/image"
-            
             with open(file_path, 'rb') as f:
-                files = {'image': (os.path.basename(file_path), f)}
+                files = {'image': f}
                 data = {'overwrite': str(overwrite).lower(), 'subfolder': subfolder}
                 response = requests.post(url, files=files, data=data, timeout=60)
                 
-                if response.status_code == 200:
-                    return response.json()
-                else:
-                    logger.error(f"Upload failed with status {response.status_code}: {response.text}")
-                    raise Exception(f"Upload failed: {response.status_code} - {response.text}")
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Upload failed: {response.status_code} - {response.text}")
+                return None
         except Exception as e:
-            logger.warning(f"Failed to upload file: {e}")
-            raise # Propagate exception to caller
-            
-        return None
+            logger.error(f"Upload exception: {e}")
+            return None
     
     def download_output_file(self, filename, subfolder="", file_type="output", output_dir=".", server_address=None):
         """
