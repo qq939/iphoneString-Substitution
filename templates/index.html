@@ -227,16 +227,58 @@
                 <div id="i2vStatus14" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
-        {% for i in range(15, 17) %}
-        <div class="grid-item item-{{ i }}">
+        <div class="grid-item item-15">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <span class="placeholder">SECTOR {{ "%02d"|format(i) }}</span>
+                <h2>视频转场 15</h2>
+                <form id="transitionForm15" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" class="action-btn">SUBMIT</button>
+                </form>
+                <div id="transitionStatus15" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
-        {% endfor %}
+        <div class="grid-item item-16">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>视频转场 16</h2>
+                <form id="transitionForm16" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" class="action-btn">SUBMIT</button>
+                </form>
+                <div id="transitionStatus16" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+            </div>
+        </div>
+        <div class="grid-item item-17">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>视频转场 17</h2>
+                <form id="transitionForm17" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" class="action-btn">SUBMIT</button>
+                </form>
+                <div id="transitionStatus17" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+            </div>
+        </div>
+        <div class="grid-item item-18">
+            <div class="grid-controls">
+                <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
+            </div>
+            <div class="grid-content">
+                <h2>视频转场 18</h2>
+                <form id="transitionForm18" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" class="action-btn">SUBMIT</button>
+                </form>
+                <div id="transitionStatus18" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -471,6 +513,81 @@
                 preview.style.display = 'block';
             }
         }
+
+        var transitionGroupId = null;
+        var transitionPollTimer = null;
+
+        function setupTransitionForm(formId, statusId) {
+            var form = document.getElementById(formId);
+            var statusDiv = document.getElementById(statusId);
+            if (!form || !statusDiv) return;
+            form.onsubmit = async function (e) {
+                e.preventDefault();
+                var btn = form.querySelector('button[type="submit"]');
+                var formData = new FormData(form);
+                if (transitionGroupId) {
+                    formData.append('group_id', transitionGroupId);
+                }
+                statusDiv.innerText = 'UPLOADING...';
+                if (btn) btn.disabled = true;
+                try {
+                    var resp = await fetch('/upload_transition_video', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    var data = await resp.json();
+                    if (resp.ok) {
+                        if (data.group_id) {
+                            transitionGroupId = data.group_id;
+                        }
+                        statusDiv.innerText = 'SUBMITTED.';
+                        if (transitionGroupId && !transitionPollTimer) {
+                            startTransitionStatusPolling();
+                        }
+                    } else {
+                        statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown');
+                    }
+                } catch (err) {
+                    statusDiv.innerText = 'SYSTEM FAILURE: ' + err.message;
+                } finally {
+                    if (btn) btn.disabled = false;
+                }
+            };
+        }
+
+        function startTransitionStatusPolling() {
+            if (!transitionGroupId) return;
+            if (transitionPollTimer) return;
+            var statusDiv15 = document.getElementById('transitionStatus15');
+            transitionPollTimer = setInterval(function () {
+                fetch('/check_group_status/' + transitionGroupId)
+                    .then(function (r) { return r.json(); })
+                    .then(function (s) {
+                        if (!statusDiv15) return;
+                        if (s.status === 'processing') {
+                            statusDiv15.innerText = 'TRANSITION PROCESSING... [' + (s.progress || '') + ']';
+                        } else if (s.status === 'completed') {
+                            clearInterval(transitionPollTimer);
+                            transitionPollTimer = null;
+                            statusDiv15.innerText = 'TRANSITION COMPLETED.';
+                            if (s.final_url) {
+                                updateLatestVideo(true);
+                            }
+                        } else if (s.status === 'failed') {
+                            clearInterval(transitionPollTimer);
+                            transitionPollTimer = null;
+                            statusDiv15.innerText = 'TRANSITION FAILED: ' + (s.error || 'Unknown');
+                        }
+                    })
+                    .catch(function () {
+                    });
+            }, 2000);
+        }
+
+        setupTransitionForm('transitionForm15', 'transitionStatus15');
+        setupTransitionForm('transitionForm16', 'transitionStatus16');
+        setupTransitionForm('transitionForm17', 'transitionStatus17');
+        setupTransitionForm('transitionForm18', 'transitionStatus18');
 
         // Audio Upload Handler
         document.getElementById('audioUploadForm').onsubmit = async function(e) {

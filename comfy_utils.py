@@ -514,9 +514,71 @@ def check_status(prompt_id, server_address=None):
 
 def download_result(file_info, output_dir, server_address=None):
     return client.download_output_file(
-        file_info['filename'], 
-        file_info['subfolder'], 
-        file_info['type'], 
+        file_info['filename'],
+        file_info['subfolder'],
+        file_info['type'],
         output_dir,
         server_address
     )
+
+
+def _load_switch_prompt():
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        txt_path = os.path.join(base_dir, "comfyapi", "swichPicture.txt")
+        if not os.path.exists(txt_path):
+            return None
+        with open(txt_path, "r", encoding="utf-8") as f:
+            candidates = []
+            for line in f:
+                text = line.strip()
+                if text and len(text) > 4:
+                    candidates.append(text)
+        if not candidates:
+            return None
+        return random.choice(candidates)
+    except Exception as e:
+        logger.warning(f"Failed to load switch prompt: {e}")
+        return None
+
+
+def queue_transition_workflow(start_image_filename, end_image_filename, width=640, height=640, fps=16):
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        workflow_path = os.path.join(base_dir, "comfyapi", "收尾帧wan2.1_flf2v_720_f16.json")
+        if not os.path.exists(workflow_path):
+            return None, None, f"Workflow file not found: {workflow_path}"
+        with open(workflow_path, "r", encoding="utf-8") as f:
+            workflow = json.load(f)
+        if "52" in workflow and "inputs" in workflow["52"] and "image" in workflow["52"]["inputs"]:
+            workflow["52"]["inputs"]["image"] = start_image_filename
+        if "72" in workflow and "inputs" in workflow["72"] and "image" in workflow["72"]["inputs"]:
+            workflow["72"]["inputs"]["image"] = end_image_filename
+        if "83" in workflow and "inputs" in workflow["83"]:
+            node_inputs = workflow["83"]["inputs"]
+            node_inputs["width"] = int(width)
+            node_inputs["height"] = int(height)
+            if "length" in node_inputs:
+                node_inputs["length"] = 16
+        for node in workflow.values():
+            if isinstance(node, dict):
+                inputs = node.get("inputs")
+                if isinstance(inputs, dict) and "fps" in inputs:
+                    inputs["fps"] = int(fps)
+        prompt_text = _load_switch_prompt()
+        if prompt_text and "6" in workflow and "inputs" in workflow["6"]:
+            workflow["6"]["inputs"]["text"] = prompt_text
+        prompt_id, server_address = client.queue_prompt(workflow)
+        if prompt_id:
+            return prompt_id, server_address, None
+        return None, None, "Failed to queue transition workflow"
+    except Exception as e:
+        error_msg = str(e)
+        if hasattr(e, "read"):
+            try:
+                error_body = e.read().decode("utf-8")
+                error_msg += f" Response: {error_body}"
+            except Exception:
+                pass
+        logger.error(f"Queue transition workflow error: {error_msg}")
+        return None, None, error_msg

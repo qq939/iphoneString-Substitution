@@ -1118,6 +1118,124 @@ def monitor_group_task(group_id):
             
         time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
 
+
+def _add_transition_video_to_group(file_storage, group_id=None):
+    try:
+        ensure_comfy_connection()
+    except Exception as e:
+        raise Exception(str(e))
+
+    if group_id is None:
+        group_id = str(uuid.uuid4())
+
+    group_data = TASKS_STORE.get(group_id)
+    if not group_data:
+        group_data = {
+            "status": "processing",
+            "tasks": [],
+            "created_at": time.time(),
+            "workflow_type": "transition",
+            "audio_path": None,
+            "transition_videos": [],
+            "monitor_started": False,
+        }
+        TASKS_STORE[group_id] = group_data
+
+    index = len(group_data.get("transition_videos", []))
+
+    original_filename = file_storage.filename or f"transition_{group_id}_{index}.mp4"
+    raw_path = os.path.join(UPLOAD_FOLDER, f"raw_transition_{group_id}_{index}.mp4")
+    file_storage.save(raw_path)
+
+    preprocessed_path = os.path.join(UPLOAD_FOLDER, f"transition_{group_id}_{index}.mp4")
+    ffmpeg_utils.resize_video(raw_path, preprocessed_path, 640, 16)
+
+    info = ffmpeg_utils.get_video_info(preprocessed_path)
+    duration = info.get("duration", 0) if isinstance(info, dict) else 0
+    if duration is None:
+        duration = 0
+
+    group_data.setdefault("transition_videos", []).append(
+        {"index": index, "path": preprocessed_path, "duration": duration, "name": original_filename}
+    )
+
+    if os.path.exists(raw_path):
+        try:
+            os.remove(raw_path)
+        except OSError:
+            pass
+
+    if index == 0:
+        group_data["tasks"].append(
+            {
+                "task_id": None,
+                "server": None,
+                "status": "completed",
+                "segment_index": 0,
+                "result_path": preprocessed_path,
+            }
+        )
+    else:
+        prev_video = group_data["transition_videos"][index - 1]
+        prev_duration = prev_video.get("duration") or 0
+        offset = prev_duration - 1.0 / 16.0
+        if offset < 0:
+            offset = 0
+
+        start_image_path = os.path.join(
+            UPLOAD_FOLDER, f"transition_{group_id}_{index - 1}_end.png"
+        )
+        end_image_path = os.path.join(
+            UPLOAD_FOLDER, f"transition_{group_id}_{index}_start.png"
+        )
+
+        ffmpeg_utils.extract_frame(prev_video["path"], start_image_path, offset)
+        ffmpeg_utils.extract_frame(preprocessed_path, end_image_path, 0)
+
+        start_upload = comfy_utils.client.upload_file(start_image_path)
+        end_upload = comfy_utils.client.upload_file(end_image_path)
+
+        if not start_upload or not end_upload:
+            raise Exception("Failed to upload transition frames to ComfyUI")
+
+        start_image_name = start_upload.get("name")
+        end_image_name = end_upload.get("name")
+        if not start_image_name or not end_image_name:
+            raise Exception("Invalid frame upload response from ComfyUI")
+
+        prompt_id, server_address, error = comfy_utils.queue_transition_workflow(
+            start_image_name, end_image_name
+        )
+        if not prompt_id:
+            raise Exception(error or "Failed to queue transition workflow")
+
+        group_data["tasks"].append(
+            {
+                "task_id": prompt_id,
+                "server": server_address,
+                "status": "pending",
+                "segment_index": 2 * index - 1,
+                "result_path": None,
+            }
+        )
+        group_data["tasks"].append(
+            {
+                "task_id": None,
+                "server": None,
+                "status": "completed",
+                "segment_index": 2 * index,
+                "result_path": preprocessed_path,
+            }
+        )
+
+    if not group_data.get("monitor_started"):
+        thread = threading.Thread(target=monitor_group_task, args=(group_id,))
+        thread.daemon = True
+        thread.start()
+        group_data["monitor_started"] = True
+
+    return group_id
+
 def monitor_i2v_group(group_id):
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
@@ -1347,6 +1465,29 @@ def upload_and_cut():
             
         TASKS_STORE[group_id]['status'] = 'failed'
         TASKS_STORE[group_id]['error'] = str(e)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/upload_transition_video', methods=['POST'])
+def upload_transition_video():
+    try:
+        ensure_comfy_connection()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+    if 'video' not in request.files:
+        return jsonify({'error': 'No video file provided'}), 400
+
+    file = request.files['video']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    group_id = request.form.get('group_id') or None
+
+    try:
+        group_id = _add_transition_video_to_group(file, group_id)
+        return jsonify({'status': 'processing', 'group_id': group_id})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/check_group_status/<group_id>', methods=['GET'])

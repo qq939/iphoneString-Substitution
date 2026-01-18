@@ -1,7 +1,7 @@
 {
   "1": {
     "inputs": {
-      "text": "text, watermark, clothing changes, overexposed, bright tone, static, blurry details, subtitle, painting, still image, grayish, worst quality, low quality, JPEG artifacts, ugly, deformed, extra fingers, bad hands, bad face, malformed mouth, disfigured, malformed limbs, fused fingers, messy background, three legs, crowded background, walking backwards, realistic skin texture, human skin pores, photorealistic details, different character, inconsistent body proportions, head-body separation",
+      "text": "closeup, text, watermark, clothing changes, overexposed, bright tone, static, blurry details, subtitle, painting, still image, grayish, worst quality, low quality, JPEG artifacts, ugly, deformed, extra fingers, bad hands, bad face, malformed mouth, disfigured, malformed limbs, fused fingers, messy background, three legs, crowded background, walking backwards, realistic skin texture, human skin pores, photorealistic details, different character, inconsistent body proportions, head-body separation",
       "clip": [
         "2",
         0
