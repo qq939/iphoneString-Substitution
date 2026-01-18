@@ -322,6 +322,7 @@ def ensure_comfy_connection():
     COMFY_STATUS['status'] = 'online'
     COMFY_STATUS['ip'] = comfy_utils.client.base_url
     COMFY_STATUS['last_checked'] = time.time()
+    print(f"【网络检查】ComfyUI连接成功，当前服务器地址: {COMFY_STATUS['ip']}")
 
 @app.route('/upload_character', methods=['POST'])
 def upload_character():
@@ -1028,6 +1029,7 @@ def monitor_group_task(group_id):
                         if local_path:
                             task['result_path'] = local_path
                             task['status'] = 'completed'
+                            print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
                         else:
                             task['status'] = 'failed'
                             task['error'] = 'Download failed'
@@ -1048,7 +1050,7 @@ def monitor_group_task(group_id):
                 all_done = False
             
         if all_done:
-            # Video Swap Logic
+            print(f"【转场】检测到组{group_id}所有ComfyUI子任务结束，开始拼接+上传OBS")
             print(f"Group {group_id} all tasks done. Concatenating...")
             # Concatenate videos
             try:
@@ -1097,6 +1099,7 @@ def monitor_group_task(group_id):
                     if obs_url:
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
+                        print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
@@ -1126,6 +1129,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
+        print(f"【转场】创建新的转场任务组，group_id={group_id}")
         group_data = {
             "status": "processing",
             "tasks": [],
@@ -1138,6 +1142,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         TASKS_STORE[group_id] = group_data
 
     index = len(group_data.get("transition_videos", []))
+    print(f"【转场】收到转场视频上传，group_id={group_id}，当前索引={index}")
 
     original_filename = file_storage.filename or f"transition_{group_id}_{index}.mp4"
     raw_path = os.path.join(UPLOAD_FOLDER, f"raw_transition_{group_id}_{index}.mp4")
@@ -1145,6 +1150,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     preprocessed_path = os.path.join(UPLOAD_FOLDER, f"transition_{group_id}_{index}.mp4")
     ffmpeg_utils.resize_video(raw_path, preprocessed_path, 640, 16)
+    print(
+        f"【转场】已预处理转场视频为640x640,16fps，原始文件={raw_path}，输出文件={preprocessed_path}"
+    )
 
     info = ffmpeg_utils.get_video_info(preprocessed_path)
     duration = info.get("duration", 0) if isinstance(info, dict) else 0
@@ -1153,6 +1161,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
     group_data.setdefault("transition_videos", []).append(
         {"index": index, "path": preprocessed_path, "duration": duration, "name": original_filename}
+    )
+    print(
+        f"【转场】步骤1/6: 视频列表与滑动窗口初始化完成，group_id={group_id}，当前列表数量={len(group_data['transition_videos'])}"
     )
 
     if os.path.exists(raw_path):
@@ -1177,6 +1188,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         offset = prev_duration - 1.0 / 16.0
         if offset < 0:
             offset = 0
+        print(f"【转场】准备生成第{index}段转场，提取前后视频关键帧")
 
         start_image_path = os.path.join(
             UPLOAD_FOLDER, f"transition_{group_id}_{index - 1}_end.png"
@@ -1187,6 +1199,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
         ffmpeg_utils.extract_frame(prev_video["path"], start_image_path, offset)
         ffmpeg_utils.extract_frame(preprocessed_path, end_image_path, 0)
+        print(
+            f"【转场】步骤2/6: 首尾帧提取完成，路径: {start_image_path}, {end_image_path}"
+        )
 
         start_upload = comfy_utils.client.upload_file(start_image_path)
         end_upload = comfy_utils.client.upload_file(end_image_path)
@@ -1204,6 +1219,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         )
         if not prompt_id:
             raise Exception(error or "Failed to queue transition workflow")
+        print(
+            f"【转场】步骤3/6: ComfyUI任务配置与提交完成，prompt_id={prompt_id}，server={server_address}"
+        )
 
         group_data["tasks"].append(
             {
@@ -1229,6 +1247,9 @@ def _add_transition_video_to_group(file_storage, group_id=None):
         thread.daemon = True
         thread.start()
         group_data["monitor_started"] = True
+
+    if index > 0:
+        print(f"【转场】步骤5/6: 滑动窗口递推执行完成，已为第{index}段转场任务完成初始化")
 
     return group_id
 
