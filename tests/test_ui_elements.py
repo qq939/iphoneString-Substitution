@@ -44,33 +44,34 @@ class TestUIElements(unittest.TestCase):
     def test_i2v_sectors_exist(self):
         with open(self.index_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            # Verify titles changed to Sector names
-            self.assertIn('Sector11', content)
-            self.assertIn('Sector12', content)
-            self.assertIn('Sector13', content)
-            self.assertIn('Sector14', content)
-            
-            # Verify input fields
+            self.assertIn('id="i2vText9"', content)
+            self.assertIn('id="i2vText10"', content)
             self.assertIn('id="i2vText11"', content)
             self.assertIn('id="i2vText12"', content)
-            self.assertIn('id="i2vText13"', content)
-            self.assertIn('id="i2vText14"', content)
-            
-            # Verify submit buttons for each sector
+
+            self.assertIn('onclick="submitI2V(9)"', content)
+            self.assertIn('onclick="submitI2V(10)"', content)
             self.assertIn('onclick="submitI2V(11)"', content)
             self.assertIn('onclick="submitI2V(12)"', content)
-            self.assertIn('onclick="submitI2V(13)"', content)
-            self.assertIn('onclick="submitI2V(14)"', content)
-            
-            # Verify status divs for each sector
+
+            self.assertIn('id="i2vStatus9"', content)
+            self.assertIn('id="i2vStatus10"', content)
             self.assertIn('id="i2vStatus11"', content)
             self.assertIn('id="i2vStatus12"', content)
-            self.assertIn('id="i2vStatus13"', content)
-            self.assertIn('id="i2vStatus14"', content)
-            
-            # Verify global submit button is removed or repurposed
-            # (It should be gone or replaced by individual buttons)
+
             self.assertNotIn('id="i2vSubmitBtn"', content)
+
+    def test_transition_sectors_exist(self):
+        with open(self.index_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            self.assertIn('id="transitionForm13"', content)
+            self.assertIn('id="transitionForm14"', content)
+            self.assertIn('id="transitionForm15"', content)
+            self.assertIn('id="transitionForm16"', content)
+            self.assertIn('id="transitionStatus13"', content)
+            self.assertIn('id="transitionStatus14"', content)
+            self.assertIn('id="transitionStatus15"', content)
+            self.assertIn('id="transitionStatus16"', content)
 
 if __name__ == '__main__':
     unittest.main()

@@ -171,7 +171,12 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>Sector9</h2>
+                <h2>图生视频</h2>
+                <div class="i2v-container">
+                    <input type="text" id="i2vText9" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
+                    <button type="button" class="action-btn" onclick="submitI2V(9)">SUBMIT</button>
+                </div>
+                <div id="i2vStatus9" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         <div class="grid-item item-10">
@@ -179,7 +184,12 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>Sector10</h2>
+                <h2>图生视频</h2>
+                <div class="i2v-container">
+                    <input type="text" id="i2vText10" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
+                    <button type="button" class="action-btn" onclick="submitI2V(10)">SUBMIT</button>
+                </div>
+                <div id="i2vStatus10" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
 
@@ -214,12 +224,12 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>图生视频</h2>
-                <div class="i2v-container">
-                    <input type="text" id="i2vText13" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
-                    <button type="button" class="action-btn" onclick="submitI2V(13)">SUBMIT</button>
-                </div>
-                <div id="i2vStatus13" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+                <h2>视频转场</h2>
+                <form id="transitionForm13" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" class="action-btn">SUBMIT</button>
+                </form>
+                <div id="transitionStatus13" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         <div class="grid-item item-14">
@@ -227,12 +237,12 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>图生视频</h2>
-                <div class="i2v-container">
-                    <input type="text" id="i2vText14" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
-                    <button type="button" class="action-btn" onclick="submitI2V(14)">SUBMIT</button>
-                </div>
-                <div id="i2vStatus14" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+                <h2>视频转场</h2>
+                <form id="transitionForm14" enctype="multipart/form-data">
+                    <input type="file" name="video" accept="video/*" class="upload-input">
+                    <button type="submit" class="action-btn">SUBMIT</button>
+                </form>
+                <div id="transitionStatus14" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
             </div>
         </div>
         <div class="grid-item item-15">
@@ -266,12 +276,7 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>视频转场</h2>
-                <form id="transitionForm17" enctype="multipart/form-data">
-                    <input type="file" name="video" accept="video/*" class="upload-input">
-                    <button type="submit" class="action-btn">SUBMIT</button>
-                </form>
-                <div id="transitionStatus17" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+                <h2>Sector17</h2>
             </div>
         </div>
         <div class="grid-item item-18">
@@ -279,12 +284,7 @@
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
             </div>
             <div class="grid-content">
-                <h2>视频转场</h2>
-                <form id="transitionForm18" enctype="multipart/form-data">
-                    <input type="file" name="video" accept="video/*" class="upload-input">
-                    <button type="submit" class="action-btn">SUBMIT</button>
-                </form>
-                <div id="transitionStatus18" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+                <h2>Sector18</h2>
             </div>
         </div>
         </div>
@@ -740,7 +740,7 @@
         function startTransitionStatusPolling() {
             if (!transitionGroupId) return;
             if (transitionPollTimer) return;
-            var statusDiv15 = document.getElementById('transitionStatus15');
+            var statusDiv15 = document.getElementById('transitionStatus13');
             transitionPollTimer = setInterval(function () {
                 fetch('/check_group_status/' + transitionGroupId)
                     .then(function (r) { return r.json(); })
@@ -766,10 +766,10 @@
             }, 2000);
         }
 
+        setupTransitionForm('transitionForm13', 'transitionStatus13');
+        setupTransitionForm('transitionForm14', 'transitionStatus14');
         setupTransitionForm('transitionForm15', 'transitionStatus15');
         setupTransitionForm('transitionForm16', 'transitionStatus16');
-        setupTransitionForm('transitionForm17', 'transitionStatus17');
-        setupTransitionForm('transitionForm18', 'transitionStatus18');
 
         // Audio Upload Handler
         document.getElementById('audioUploadForm').onsubmit = async function(e) {
@@ -860,10 +860,8 @@
             statusDiv.innerText = 'SUBMITTING...';
             btn.disabled = true;
             
-            // Construct texts array with only the current index populated
-            // Sector 11 -> index 0, ..., Sector 14 -> index 3
             const texts = ["", "", "", ""];
-            texts[index - 11] = text;
+            texts[index - 9] = text;
             
             fetch('/generate_i2v_group', {
                 method: 'POST',

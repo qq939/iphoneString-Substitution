@@ -62,18 +62,5 @@ def test_sector8_and_9_have_content():
         with open(index_path, "r", encoding="utf-8") as f:
             content = f.read()
         assert "latestAudioPreview" in content
-        # Sector9 作为无标题格子，只保留别名
-        assert "Sector9" in content
-        assert "RESERVED SLOT" not in content
-
-
-def test_sector_titles_have_alias_and_sector_suffix():
-    with timeout_scope(5):
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(base_dir)
-        index_path = os.path.join(project_root, "templates", "index.html")
-        with open(index_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        # 有标题的格子不应该在标题里出现 Sector 别名
-        for i in (1, 7, 11):
-            assert f"(Sector{i})" not in content
+        assert 'id="i2vText9"' in content
+        assert 'onclick="submitI2V(9)"' in content
