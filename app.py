@@ -1130,6 +1130,8 @@ def _add_transition_video_to_group(file_storage, group_id=None):
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
         print(f"【转场】创建新的转场任务组，group_id={group_id}")
+        # Initialize group data with a consistent switch prompt
+        switch_prompt = comfy_utils._load_switch_prompt()
         group_data = {
             "status": "processing",
             "tasks": [],
@@ -1138,6 +1140,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
             "audio_path": None,
             "transition_videos": [],
             "monitor_started": False,
+            "switch_prompt": switch_prompt,
         }
         TASKS_STORE[group_id] = group_data
 
@@ -1215,7 +1218,7 @@ def _add_transition_video_to_group(file_storage, group_id=None):
             raise Exception("Invalid frame upload response from ComfyUI")
 
         prompt_id, server_address, error = comfy_utils.queue_transition_workflow(
-            start_image_name, end_image_name
+            start_image_name, end_image_name, prompt_text=group_data.get("switch_prompt")
         )
         if not prompt_id:
             raise Exception(error or "Failed to queue transition workflow")

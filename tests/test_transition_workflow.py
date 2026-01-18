@@ -153,6 +153,90 @@ def test_upload_transition_video_logging_steps(client, monkeypatch):
     assert "【转场】步骤5/6: 滑动窗口递推执行完成" in log_text
 
 
+def test_upload_transition_video_consistent_switch_prompt(client, monkeypatch):
+    video_content = b"fake video for transition"
+    filename = "transition_consistent_prompt_test.mp4"
+
+    # Mock _load_switch_prompt to return different values on consecutive calls
+    mock_prompts = ["Prompt A", "Prompt B", "Prompt C"]
+    
+    # We use a mutable list to simulate side effects
+    prompts_iter = iter(mock_prompts)
+    
+    def fake_load_switch_prompt():
+        return next(prompts_iter)
+
+    with timeout_scope(5):
+        with patch("app.ffmpeg_utils.resize_video") as mock_resize, patch(
+            "app.ffmpeg_utils.get_video_info"
+        ) as mock_info, patch(
+            "app.ffmpeg_utils.extract_frame"
+        ) as mock_extract, patch(
+            "app.comfy_utils.client.upload_file"
+        ) as mock_upload, patch(
+            "app.comfy_utils.queue_transition_workflow"
+        ) as mock_queue_transition, patch(
+            "app.ensure_comfy_connection"
+        ) as mock_ensure, patch(
+            "app.comfy_utils._load_switch_prompt", side_effect=fake_load_switch_prompt
+        ) as mock_load_prompt:
+            
+            mock_ensure.return_value = None
+            mock_resize.return_value = None
+            mock_info.return_value = {"duration": 4.0}
+            mock_extract.return_value = None
+            mock_upload.return_value = {"name": "fake_image.png"}
+            
+            # Setup queue_transition_workflow to just return success
+            mock_queue_transition.return_value = ("prompt_id", "server", None)
+
+            # 1. First upload: creates group, should call _load_switch_prompt
+            data = {"video": (io.BytesIO(video_content), filename)}
+            response = client.post(
+                "/upload_transition_video",
+                data=data,
+                content_type="multipart/form-data",
+            )
+            assert response.status_code == 200
+            group_id = response.get_json()["group_id"]
+            
+            # Check that _load_switch_prompt was called
+            assert mock_load_prompt.called
+            assert mock_load_prompt.call_count == 1
+            
+            # 2. Second upload: adds to same group, should NOT call _load_switch_prompt again (or if it does, it's not used)
+            # Actually, our implementation in app.py calls it only when creating the group.
+            # But queue_transition_workflow in app.py now passes prompt_text=group_data['switch_prompt']
+            
+            # Let's verify what prompt text was passed to queue_transition_workflow
+            # We need to trigger a transition, which happens when index > 0 (second video)
+            
+            data2 = {
+                "video": (io.BytesIO(video_content), filename),
+                "group_id": group_id,
+            }
+            response2 = client.post(
+                "/upload_transition_video",
+                data=data2,
+                content_type="multipart/form-data",
+            )
+            assert response2.status_code == 200
+            
+            # Now queue_transition_workflow should have been called
+            assert mock_queue_transition.called
+            
+            # Get the arguments passed to queue_transition_workflow
+            # It's called as: queue_transition_workflow(start, end, prompt_text=...)
+            call_kwargs = mock_queue_transition.call_args[1]
+            assert "prompt_text" in call_kwargs
+            assert call_kwargs["prompt_text"] == "Prompt A"
+            
+            # Verify _load_switch_prompt was NOT called again by app.py logic 
+            # (it's called inside app.py only when group_data is None)
+            assert mock_load_prompt.call_count == 1
+
+
+
 def test_monitor_group_task_logging_after_all_done(monkeypatch):
     from app import monitor_group_task, TASKS_STORE, UPLOAD_FOLDER
 

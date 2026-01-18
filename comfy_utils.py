@@ -582,7 +582,7 @@ def _load_switch_prompt():
         return None
 
 
-def queue_transition_workflow(start_image_filename, end_image_filename, width=640, height=640, fps=16):
+def queue_transition_workflow(start_image_filename, end_image_filename, width=640, height=640, fps=16, prompt_text=None):
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         workflow_path = os.path.join(base_dir, "comfyapi", "收尾帧wan2.1_flf2v_720_f16.json")
@@ -605,7 +605,8 @@ def queue_transition_workflow(start_image_filename, end_image_filename, width=64
                 inputs = node.get("inputs")
                 if isinstance(inputs, dict) and "fps" in inputs:
                     inputs["fps"] = int(fps)
-        prompt_text = _load_switch_prompt()
+        if prompt_text is None:
+            prompt_text = _load_switch_prompt()
         if prompt_text and "6" in workflow and "inputs" in workflow["6"]:
             workflow["6"]["inputs"]["text"] = prompt_text
         prompt_id, server_address = client.queue_prompt(workflow)
