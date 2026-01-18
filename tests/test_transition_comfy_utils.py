@@ -68,3 +68,10 @@ def test_queue_transition_workflow_basic():
 
             node6_inputs = sent_workflow.get("6", {}).get("inputs", {})
             assert node6_inputs.get("text") == "测试转场文案abcdef"
+
+
+def test_load_switch_prompt_uses_root_file_if_exists():
+    with timeout_scope(5):
+        text = comfy_utils._load_switch_prompt()
+        assert text is not None
+        assert isinstance(text, str)

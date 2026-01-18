@@ -525,9 +525,12 @@ def download_result(file_info, output_dir, server_address=None):
 def _load_switch_prompt():
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        txt_path = os.path.join(base_dir, "comfyapi", "swichPicture.txt")
+        root_path = base_dir
+        txt_path = os.path.join(root_path, "swichPicture.txt")
         if not os.path.exists(txt_path):
-            return None
+            txt_path = os.path.join(base_dir, "comfyapi", "swichPicture.txt")
+            if not os.path.exists(txt_path):
+                return None
         with open(txt_path, "r", encoding="utf-8") as f:
             candidates = []
             for line in f:

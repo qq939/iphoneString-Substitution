@@ -64,3 +64,36 @@ def test_sector8_and_9_have_content():
         assert "latestAudioPreview" in content
         assert 'id="i2vText9"' in content
         assert 'onclick="submitI2V(9)"' in content
+
+
+def test_each_page_has_16_sectors_and_total_32():
+    with timeout_scope(5):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(base_dir)
+        index_path = os.path.join(project_root, "templates", "index.html")
+        with open(index_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        import re
+
+        lines = content.splitlines()
+        current_page = None
+        page_items = {}
+
+        for line in lines:
+            if 'grid-container page page-1' in line:
+                current_page = 1
+            elif 'grid-container page page-2' in line:
+                current_page = 2
+
+            m = re.search(r'class="grid-item item-(\d+)"', line)
+            if m:
+                assert current_page in (1, 2)
+                num = int(m.group(1))
+                page_items.setdefault(current_page, []).append(num)
+
+        assert len(page_items.get(1, [])) == 16
+        assert len(page_items.get(2, [])) == 16
+        all_items = page_items.get(1, []) + page_items.get(2, [])
+        assert len(all_items) == 32
+        assert len(set(all_items)) == 32
