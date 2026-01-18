@@ -27,16 +27,15 @@ except ImportError:
     AudioSegment = None
 
 app = Flask(__name__)
-SUBSTITUTION_FILE = 'langchain/substitution.txt'
 
-# Video Cut Config
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
+# Global config and shared state (used across multiple routes and helpers)
+SUBSTITUTION_FILE = 'langchain/substitution.txt'  # Used in: index route text substitution logic
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')  # Used in: all upload, temp, ffmpeg operations
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# ComfyUI Status
-COMFY_STATUS = {
+COMFY_STATUS = {  # Used in: check_comfy_status, /comfy_status, ensure_comfy_connection, /retest_connection
     'status': 'unknown',
     'last_checked': 0,
     'ip': 'Unknown'
@@ -70,26 +69,12 @@ def check_comfy_status():
 status_thread = threading.Thread(target=check_comfy_status, daemon=True)
 status_thread.start()
 
-# In-memory store for task groups
-# Structure:
-# {
-#   "group_id": {
-#       "status": "processing" | "completed" | "failed",
-#       "tasks": [
-#           {"task_id": "xxx", "status": "pending" | "completed" | "failed", "segment_index": 0, "result_path": "path/to/file"}
-#       ],
-#       "final_url": "http://...",
-#       "error": "..."
-#   }
-# }
-TASKS_STORE = {}
-# Store audio task state to prevent duplicate stage 2 processing
-# { prompt_id: {'status': 'pending'|'processing_result'|'completed', 'url': '...'} }
-AUDIO_TASKS = {}
-AUDIO_LOCK = threading.Lock()
+TASKS_STORE = {}  # Used in: upload_and_cut, generate_i2v_group, monitor_group_task, _add_transition_video_to_group, check_group_status
+AUDIO_TASKS = {}  # Used in: upload_audio, check_audio_status, process_audio_result
+AUDIO_LOCK = threading.Lock()  # Used in: concurrent audio task state protection
 
-BACKEND_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
-BACKEND_POLL_INTERVAL_SECONDS = 15
+BACKEND_TASK_TIMEOUT_SECONDS = 6 * 60 * 60  # Used in: monitor_group_task timeout control
+BACKEND_POLL_INTERVAL_SECONDS = 15  # Used in: monitor_group_task polling interval
 
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
     """

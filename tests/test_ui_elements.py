@@ -44,11 +44,11 @@ class TestUIElements(unittest.TestCase):
     def test_i2v_sectors_exist(self):
         with open(self.index_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            # Verify titles
-            self.assertIn('图生视频 11', content)
-            self.assertIn('图生视频 12', content)
-            self.assertIn('图生视频 13', content)
-            self.assertIn('图生视频 14', content)
+            # Verify titles changed to Sector names
+            self.assertIn('Sector11', content)
+            self.assertIn('Sector12', content)
+            self.assertIn('Sector13', content)
+            self.assertIn('Sector14', content)
             
             # Verify input fields
             self.assertIn('id="i2vText11"', content)

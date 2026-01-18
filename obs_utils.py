@@ -4,11 +4,11 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# Configure logging
+# Configure logging (used in: upload_file for OBS operations)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OBS_BASE_URL = "http://obs.dimond.top"
+OBS_BASE_URL = "http://obs.dimond.top"  # Used in: upload_file target URL construction
 
 def upload_file(file_path, file_name, mime_type=None):
     """

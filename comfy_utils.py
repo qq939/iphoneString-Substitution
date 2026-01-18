@@ -12,11 +12,11 @@ import threading
 import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Configure logging
+# Configure logging (used throughout comfy_utils for diagnostics)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Server list for dual-try mechanism
+# Server list for dual-try mechanism (used in: ComfyUIClient.find_fastest_server, check_status fallbacks)
 SERVER_LIST = [
     "192.168.0.209:7860",
     "192.168.0.210:7860",
