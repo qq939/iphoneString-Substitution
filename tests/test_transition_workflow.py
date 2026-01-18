@@ -212,8 +212,6 @@ def test_monitor_group_task_logging_after_all_done(monkeypatch):
 
 def test_monitor_group_task_logging_step4(monkeypatch):
     from app import monitor_group_task, TASKS_STORE, UPLOAD_FOLDER
-    import inspect
-    print(f"DEBUG SOURCE: {inspect.getsource(monitor_group_task)}")
 
     captured_logs = []
 
