@@ -710,21 +710,9 @@
                 var container = document.querySelector('.grid-item.item-' + num + ' .grid-content');
                 if (container) {
                     var display = document.getElementById('groupIdDisplay-' + num);
-                    if (!display) {
-                        display = document.createElement('div');
-                        display.id = 'groupIdDisplay-' + num;
-                        display.style.fontSize = '0.6em';
-                        display.style.color = '#ffff00';
-                        display.style.marginBottom = '5px';
-                        // Insert after h2
-                        var h2 = container.querySelector('h2');
-                        if (h2 && h2.nextSibling) {
-                            container.insertBefore(display, h2.nextSibling);
-                        } else {
-                            container.appendChild(display);
-                        }
+                    if (display) {
+                        display.remove(); // Remove existing display if any
                     }
-                    display.innerText = 'GID: ' + (id ? id.substring(0, 8) + '...' : 'None');
                 }
             });
         }
@@ -733,6 +721,17 @@
         document.addEventListener('DOMContentLoaded', updateGroupIdDisplay);
 
         var transitionPollTimer = null;
+
+        // UUID Generator
+        function generateUUID() {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
 
         function setupTransitionForm(formId, statusId) {
             var form = document.getElementById(formId);
@@ -744,12 +743,15 @@
                 var formData = new FormData(form);
                 
                 var currentGroupId = getGroupId();
-                if (currentGroupId) {
-                    console.log('Appending Group ID:', currentGroupId);
-                    formData.append('group_id', currentGroupId);
+                if (!currentGroupId) {
+                    currentGroupId = generateUUID();
+                    setGroupId(currentGroupId);
+                    console.log('Generated new Group ID:', currentGroupId);
                 } else {
-                    console.log('No Group ID found, starting new group');
+                    console.log('Using existing Group ID:', currentGroupId);
                 }
+                
+                formData.append('group_id', currentGroupId);
 
                 statusDiv.innerText = 'UPLOADING...';
                 if (btn) btn.disabled = true;
@@ -761,7 +763,11 @@
                     var data = await resp.json();
                     if (resp.ok) {
                         if (data.group_id) {
-                            setGroupId(data.group_id);
+                            // Ensure it matches (it should)
+                            if (data.group_id !== currentGroupId) {
+                                console.warn('Server returned different Group ID:', data.group_id);
+                                setGroupId(data.group_id);
+                            }
                         }
                         statusDiv.innerText = 'SUBMITTED.';
                         if (getGroupId() && !transitionPollTimer) {
