@@ -147,9 +147,10 @@ def test_upload_transition_video_logging_steps(client, monkeypatch):
 
     log_text = "\n".join(captured_logs)
     assert "已预处理转场视频为640x640" in log_text
-    assert "已将视频追加到转场列表" in log_text
-    assert "准备生成第" in log_text
-    assert "提交ComfyUI收尾帧工作流" in log_text
+    assert "【转场】步骤1/6: 视频列表与滑动窗口初始化完成" in log_text
+    assert "【转场】步骤2/6: 首尾帧提取完成" in log_text
+    assert "【转场】步骤3/6: ComfyUI任务配置与提交完成" in log_text
+    assert "【转场】步骤5/6: 滑动窗口递推执行完成" in log_text
 
 
 def test_monitor_group_task_logging_after_all_done(monkeypatch):
@@ -206,3 +207,60 @@ def test_monitor_group_task_logging_after_all_done(monkeypatch):
     log_text = "\n".join(captured_logs)
     assert "检测到组" in log_text
     assert "开始拼接+上传OBS" in log_text
+    assert "【转场】步骤6/6: 视频合并、重命名与上传完成" in log_text
+
+
+def test_monitor_group_task_logging_step4(monkeypatch):
+    from app import monitor_group_task, TASKS_STORE, UPLOAD_FOLDER
+    import inspect
+    print(f"DEBUG SOURCE: {inspect.getsource(monitor_group_task)}")
+
+    captured_logs = []
+
+    def fake_print(*args, **kwargs):
+        msg = " ".join(str(a) for a in args)
+        captured_logs.append(msg)
+
+    monkeypatch.setattr("builtins.print", fake_print)
+
+    group_id = "test_group_step4"
+    TASKS_STORE[group_id] = {
+        "status": "processing",
+        "tasks": [
+            {
+                "task_id": "t_step4",
+                "server": "server1",
+                "status": "pending",
+                "segment_index": 0,
+                "result_path": None,
+            }
+        ],
+        "created_at": None,
+        "audio_path": None,
+        "workflow_type": "transition",
+    }
+
+    with timeout_scope(5):
+        # We need to mock the functions on the comfy_utils module object that app.py uses
+        # Since app.py does 'import comfy_utils', we should patch 'app.comfy_utils.check_status'
+        # and 'app.comfy_utils.download_result'
+
+        # But to be safe, let's verify if check_status returns what we want
+        # We can use side_effect to print something if called
+
+        with patch("app.comfy_utils.check_status") as mock_check, patch(
+            "app.comfy_utils.download_result"
+        ) as mock_download, patch("app.os.path.exists") as mock_exists, patch(
+            "app.ffmpeg_utils.concatenate_videos"
+        ) as mock_concat, patch("app.obs_utils.upload_file", return_value="http://obs/res.mp4"), patch(
+            "app.shutil.move"
+        ) as mock_move:
+            # Simulate success
+            mock_check.return_value = ("SUCCEEDED", {"outputs": {}})
+            mock_download.return_value = "/tmp/fake_result.mp4"
+            mock_exists.return_value = True # Make sure file exists check passes so we don't fail later
+            
+            monitor_group_task(group_id)
+
+    log_text = "\n".join(captured_logs)
+    assert "【转场】步骤4/6: 转场视频下载与定位完成" in log_text
