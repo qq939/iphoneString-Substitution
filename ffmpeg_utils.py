@@ -104,11 +104,17 @@ def cut_video(input_path, output_path, start_time, end_time):
         ]
         run_command(cmd)
 
-def image_to_video(image_path, output_path, duration, fps=20):
+def image_to_video(image_path, output_path, duration, fps=20, width=None, height=None):
     """Create a video from a single image."""
-    # Ensure dimensions are even
-    # We can use scale filter for that too: scale=trunc(iw/2)*2:trunc(ih/2)*2
-    
+    if width is not None and height is not None:
+        scale_filter = f"scale={width}:{height}"
+    elif width is not None:
+        scale_filter = f"scale={width}:-2"
+    elif height is not None:
+        scale_filter = f"scale=-2:{height}"
+    else:
+        scale_filter = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
     cmd = [
         'ffmpeg', '-y',
         '-loop', '1',
@@ -116,7 +122,7 @@ def image_to_video(image_path, output_path, duration, fps=20):
         '-c:v', 'libx264',
         '-t', str(duration),
         '-pix_fmt', 'yuv420p',
-        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', # Ensure even dimensions
+        '-vf', scale_filter,
         '-r', str(fps),
         output_path
     ]

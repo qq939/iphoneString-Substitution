@@ -32,6 +32,10 @@ app = Flask(__name__)
 SUBSTITUTION_FILE = 'langchain/substitution.txt'  # Used in: index route text substitution logic
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')  # Used in: all upload, temp, ffmpeg operations
 
+VIDEO_WIDTH = 640  # Used in: generate_1s_video (ffmpeg image_to_video width)
+VIDEO_HEIGHT = 640  # Used in: generate_1s_video (ffmpeg image_to_video height)
+VIDEO_FPS = 16  # Used in: generate_1s_video (ffmpeg image_to_video fps)
+
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
@@ -136,10 +140,18 @@ def modify_i2v_workflow(workflow, image_filename, prompt_text):
 
 def generate_1s_video(image_path, output_path):
     """
-    Generates a 1-second 25fps video from an image using ffmpeg.
+    Generates a 1-second video from an image using ffmpeg, with FPS and
+    resolution controlled by global VIDEO_WIDTH, VIDEO_HEIGHT and VIDEO_FPS.
     """
     try:
-        ffmpeg_utils.image_to_video(image_path, output_path, duration=1, fps=25)
+        ffmpeg_utils.image_to_video(
+            image_path,
+            output_path,
+            duration=1,
+            fps=VIDEO_FPS,
+            width=VIDEO_WIDTH,
+            height=VIDEO_HEIGHT,
+        )
     except Exception as e:
         print(f"Error generating 1s video: {e}")
         raise e

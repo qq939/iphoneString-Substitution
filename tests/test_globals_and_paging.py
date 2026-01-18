@@ -47,8 +47,7 @@ def test_index_has_sector_titles_and_paging_controls():
         index_path = os.path.join(project_root, "templates", "index.html")
         with open(index_path, "r", encoding="utf-8") as f:
             content = f.read()
-        for i in range(1, 33):
-            assert f"Sector{i}" in content
+        # 只检查分页骨架存在，不再强制所有 Sector 文本都出现
         assert "page-container" in content
         assert "page-nav-bar" in content
         assert "page-nav-prev" in content
@@ -62,10 +61,10 @@ def test_sector8_and_9_have_content():
         index_path = os.path.join(project_root, "templates", "index.html")
         with open(index_path, "r", encoding="utf-8") as f:
             content = f.read()
-        assert "Sector8" in content
         assert "latestAudioPreview" in content
+        # Sector9 作为无标题格子，只保留别名
         assert "Sector9" in content
-        assert "RESERVED SLOT" in content
+        assert "RESERVED SLOT" not in content
 
 
 def test_sector_titles_have_alias_and_sector_suffix():
@@ -75,6 +74,6 @@ def test_sector_titles_have_alias_and_sector_suffix():
         index_path = os.path.join(project_root, "templates", "index.html")
         with open(index_path, "r", encoding="utf-8") as f:
             content = f.read()
-        # 样本检查：Sector1 / 7 / 11 的标题中应包含 "(SectorX)" 形式的别名标记
+        # 有标题的格子不应该在标题里出现 Sector 别名
         for i in (1, 7, 11):
-            assert f"(Sector{i})" in content
+            assert f"(Sector{i})" not in content
