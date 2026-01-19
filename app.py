@@ -77,7 +77,8 @@ TASKS_STORE = {}  # Used in: upload_and_cut, generate_i2v_group, monitor_group_t
 AUDIO_TASKS = {}  # Used in: upload_audio, check_audio_status, process_audio_result
 AUDIO_LOCK = threading.Lock()  # Used in: concurrent audio task state protection
 WAIT_OVERTIME_SECONDS = 6 * 60 * 60  # Used in: monitor_group_task timeout control
-BACKEND_POLL_INTERVAL_SECONDS = 15  # Used in: monitor_group_task polling interval
+BACKEND_TASK_TIMEOUT_SECONDS = 6 * 60 * 60  # Used in: monitor_audio_task, monitor_i2v_group timeout control
+BACKEND_POLL_INTERVAL_SECONDS = 15  # Used in: monitor_group_task, monitor_audio_task, monitor_i2v_group polling interval
 
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
     """

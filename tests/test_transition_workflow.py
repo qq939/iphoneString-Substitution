@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import signal
+import time
 from contextlib import contextmanager
 from unittest.mock import patch, MagicMock
 
@@ -346,3 +347,141 @@ def test_monitor_group_task_logging_step4(monkeypatch):
 
     log_text = "\n".join(captured_logs)
     assert "【转场】步骤4/6: 转场视频下载与定位完成" in log_text
+
+
+def test_monitor_i2v_group_timeout(monkeypatch):
+    from app import monitor_i2v_group, TASKS_STORE, BACKEND_TASK_TIMEOUT_SECONDS
+
+    group_id = "test_i2v_timeout"
+    TASKS_STORE[group_id] = {
+        "status": "processing",
+        "tasks": [],
+        "created_at": time.time() - (BACKEND_TASK_TIMEOUT_SECONDS + 1),
+        "audio_path": None,
+        "workflow_type": "i2v",
+    }
+
+    monkeypatch.setattr("app.time.sleep", lambda *args, **kwargs: None)
+
+    with timeout_scope(5):
+        monitor_i2v_group(group_id)
+
+    assert TASKS_STORE[group_id]["status"] == "failed"
+
+
+def test_monitor_i2v_group_auto_trigger_sector13(monkeypatch):
+    from app import monitor_i2v_group, TASKS_STORE, UPLOAD_FOLDER, CHANNEL_TRANSITION_GROUPS
+
+    CHANNEL_TRANSITION_GROUPS["13"] = None
+    CHANNEL_TRANSITION_GROUPS["14"] = None
+    CHANNEL_TRANSITION_GROUPS["15"] = None
+    CHANNEL_TRANSITION_GROUPS["16"] = None
+
+    group_id = "test_i2v_auto_13"
+    seg_path = os.path.join(UPLOAD_FOLDER, "i2v_seg0.mp4")
+    with open(seg_path, "wb") as f:
+        f.write(b"seg0")
+
+    TASKS_STORE[group_id] = {
+        "status": "processing",
+        "tasks": [
+            {
+                "task_id": "t0",
+                "server": None,
+                "status": "completed",
+                "segment_index": 0,
+                "result_path": seg_path,
+            }
+        ],
+        "created_at": None,
+        "audio_path": None,
+        "workflow_type": "i2v",
+    }
+
+    called = {}
+
+    def fake_concat(video_paths, output_path):
+        with open(output_path, "wb") as f:
+            f.write(b"concat")
+
+    def fake_upload(path, filename, mime_type=None):
+        return "http://obs/final_13.mp4"
+
+    def fake_add_video(file_path, original_filename, group_id=None):
+        called["file_path"] = file_path
+        called["original_filename"] = original_filename
+        called["group_id"] = group_id
+        return "group_13"
+
+    monkeypatch.setattr("app.ffmpeg_utils.concatenate_videos", fake_concat)
+    monkeypatch.setattr("app.obs_utils.upload_file", fake_upload)
+    monkeypatch.setattr("app.add_video_to_transition_group_core", fake_add_video)
+    monkeypatch.setattr("app.time.sleep", lambda *args, **kwargs: None)
+
+    with timeout_scope(5):
+        monitor_i2v_group(group_id)
+
+    assert TASKS_STORE[group_id]["status"] == "completed"
+    assert TASKS_STORE[group_id]["final_url"] == "http://obs/final_13.mp4"
+    assert called["file_path"].endswith("all.mp4")
+    assert called["original_filename"].endswith("all.mp4")
+    assert CHANNEL_TRANSITION_GROUPS["13"] == "group_13"
+
+
+def test_monitor_i2v_group_auto_trigger_sector14(monkeypatch):
+    from app import monitor_i2v_group, TASKS_STORE, UPLOAD_FOLDER, CHANNEL_TRANSITION_GROUPS
+
+    CHANNEL_TRANSITION_GROUPS["13"] = None
+    CHANNEL_TRANSITION_GROUPS["14"] = None
+    CHANNEL_TRANSITION_GROUPS["15"] = None
+    CHANNEL_TRANSITION_GROUPS["16"] = None
+
+    group_id = "test_i2v_auto_14"
+    seg_path = os.path.join(UPLOAD_FOLDER, "i2v_seg1.mp4")
+    with open(seg_path, "wb") as f:
+        f.write(b"seg1")
+
+    TASKS_STORE[group_id] = {
+        "status": "processing",
+        "tasks": [
+            {
+                "task_id": "t1",
+                "server": None,
+                "status": "completed",
+                "segment_index": 1,
+                "result_path": seg_path,
+            }
+        ],
+        "created_at": None,
+        "audio_path": None,
+        "workflow_type": "i2v",
+    }
+
+    called = {}
+
+    def fake_concat(video_paths, output_path):
+        with open(output_path, "wb") as f:
+            f.write(b"concat")
+
+    def fake_upload(path, filename, mime_type=None):
+        return "http://obs/final_14.mp4"
+
+    def fake_add_video(file_path, original_filename, group_id=None):
+        called["file_path"] = file_path
+        called["original_filename"] = original_filename
+        called["group_id"] = group_id
+        return "group_14"
+
+    monkeypatch.setattr("app.ffmpeg_utils.concatenate_videos", fake_concat)
+    monkeypatch.setattr("app.obs_utils.upload_file", fake_upload)
+    monkeypatch.setattr("app.add_video_to_transition_group_core", fake_add_video)
+    monkeypatch.setattr("app.time.sleep", lambda *args, **kwargs: None)
+
+    with timeout_scope(5):
+        monitor_i2v_group(group_id)
+
+    assert TASKS_STORE[group_id]["status"] == "completed"
+    assert TASKS_STORE[group_id]["final_url"] == "http://obs/final_14.mp4"
+    assert called["file_path"].endswith("all.mp4")
+    assert called["original_filename"].endswith("all.mp4")
+    assert CHANNEL_TRANSITION_GROUPS["14"] == "group_14"
