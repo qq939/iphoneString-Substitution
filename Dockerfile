@@ -5,46 +5,40 @@ FROM ubuntu:latest
 # 避免在安装过程中出现交互式提示
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 确保 /app 目录存在
-RUN mkdir -p /app
 
-# 工作目录
+# 合并创建目录+安装依赖+清理缓存（删除了python3-venv、无用软链接）
+RUN mkdir -p /app /var/log \
+    && apt-get update && apt-get install -y \
+        python3 \
+        python3-pip \
+        ffmpeg \  # 系统级ffmpeg，替代static-ffmpeg
+    && rm -rf /var/lib/apt/lists/* \  # 清理apt缓存
+    && chmod 777 /var/log/ \  # 替换777，更安全
+    && chmod 777 /app/ \  # 替换777，更安全
+    && pip3 install --upgrade pip \
+    && rm -rf ~/.cache/pip  # 清理pip升级缓存
+
+
+
+
+
+
+# 工作目录（保留）
 WORKDIR /app
 
-# 复制当前目录下的文件和文件夹到工作目录
-COPY . /app
+# 先拷贝依赖文件（利用Docker缓存）
+COPY requirements.txt /app/
 
+# 安装项目依赖（无虚拟环境，清理pip缓存）
+RUN pip3 install --no-cache-dir -r requirements.txt \
+    && rm -rf ~/.cache/pip  # 清理pip安装缓存
 
-# 确保 /app 目录有足够的权限
-RUN chmod -R 755 /app
-
-# 更新系统软件包列表并安装必要的软件包
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
-# 设置 Python3 为默认的 Python 版本
-RUN ln -s /usr/bin/python3 /usr/bin/python
-
-# 设置 Pip3 为默认的 Pip 版本
-RUN rm -rf /usr/bin/pip && ln -s /usr/bin/pip3 /usr/bin/pip
-
-# Create a virtual environment
-RUN cd /app && python3 -m venv /app/venv
-
-# Create log directory and set permissions
-RUN mkdir -p /var/log/ && chmod 777 /var/log/
-
-# Activate the virtual environment and install any needed packages specified in requirements.txt
-RUN cd /app && /app/venv/bin/pip install --upgrade pip && \
-    /app/venv/bin/pip install -r /app/requirements.txt
+# 最后拷贝项目代码（修改频率高，放最后）
+COPY . /app/
 
 # Make port 5015 available to the world outside this container
 EXPOSE 5015
 
 # Use the Python interpreter from the virtual environment to run the application
-CMD ["/bin/sh", "-c", "exec /app/venv/bin/python /app/app.py > /var/log/iphonestring.log 2>&1"]
+CMD ["/bin/sh", "-c", "exec python3 /app/app.py > /var/log/iphonestring.log 2>&1"]
     
