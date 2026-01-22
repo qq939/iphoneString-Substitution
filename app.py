@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, Response, jsonify
+from flask import Flask, render_template, request, redirect, url_for, Response, jsonify, send_from_directory
 import os
 import re
 import urllib
@@ -46,6 +46,10 @@ VIDEO_FPS = 16  # Used in: generate_1s_video (ffmpeg image_to_video fps)
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+
+@app.route('/uploads/<path:filename>')
+def serve_uploads(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 COMFY_STATUS = {  # Used in: check_comfy_status, /comfy_status, ensure_comfy_connection, /retest_connection
     'status': 'unknown',
@@ -1807,12 +1811,13 @@ def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
              if log_callback: log_callback("No reference image found for I2V.")
              return None
              
-        if log_callback: log_callback(f"Uploading reference image to ComfyUI...")
+        if log_callback: log_callback(f"Uploading reference image to ComfyUI: {image_path}")
         upload_res = comfy_utils.client.upload_file(image_path)
         if not upload_res or 'name' not in upload_res:
              if log_callback: log_callback("Failed to upload reference image to ComfyUI")
              return None
         image_name = upload_res['name']
+        if log_callback: log_callback(f"Uploaded to ComfyUI as: {image_name} (Type: {upload_res.get('type', 'input')})")
         
         # Load workflow
         workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '图生视频video_wan2_2_14B_i2v.json')
@@ -1830,6 +1835,7 @@ def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
         if log_callback: log_callback("Submitting to ComfyUI...")
         try:
             prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
+            if log_callback: log_callback(f"Submitted to ComfyUI Server: {server_address}")
         except Exception as e:
             if log_callback: log_callback(f"Queue Prompt Failed: {e}")
             return None
@@ -1867,11 +1873,30 @@ def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
         print(f"I2V Trigger Error: {e}")
         return None
 
+def process_log_message(msg):
+    """
+    Process log message to make paths web-accessible and add image markers.
+    """
+    # Replace UPLOAD_FOLDER with /uploads prefix for web access
+    if UPLOAD_FOLDER in msg:
+        msg = msg.replace(UPLOAD_FOLDER, '/uploads')
+    
+    # Check for image paths and append image tag marker
+    # Regex to find /uploads/path/to/image.ext
+    # We use a marker [IMG:url] to be safe and easy to parse.
+    match = re.search(r'(/uploads/[^\s]+\.(?:jpg|jpeg|png|webp|gif))', msg, re.IGNORECASE)
+    if match:
+        url = match.group(1)
+        msg += f" [IMG:{url}]"
+        
+    return msg
+
 def run_sector17_task(task_id, text, output_dir):
     try:
         def log_callback(msg):
             if task_id in SECTOR_TASKS:
-                SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+                processed_msg = process_log_message(msg)
+                SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {processed_msg}")
         
         # Unpack prompt and image_path
         prompt, image_path = extractor_utils.process_query_to_prompt(text, output_dir, log_callback=log_callback)
@@ -1923,7 +1948,8 @@ def run_sector19_task(task_id, video_path, output_dir):
     try:
         def log_callback(msg):
             if task_id in SECTOR_TASKS:
-                SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+                processed_msg = process_log_message(msg)
+                SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {processed_msg}")
         
         # Analyze
         prompt, image_path = extractor_utils.analyze_video(video_path, extractor_utils.RESOURCE_DIR, log_callback=log_callback)

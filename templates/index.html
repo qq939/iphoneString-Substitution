@@ -993,6 +993,22 @@
         }
 
 
+        // Helper to format logs with images
+        function formatLog(logText) {
+            // Escape HTML first
+            let escaped = logText.replace(/&/g, "&amp;")
+                                 .replace(/</g, "&lt;")
+                                 .replace(/>/g, "&gt;")
+                                 .replace(/"/g, "&quot;")
+                                 .replace(/'/g, "&#039;");
+            
+            // Replace [IMG:url] with <img> tag
+            escaped = escaped.replace(/\[IMG:(.*?)\]/g, '<br><img src="$1" style="max-width:200px; display:block; margin:5px 0; border:1px solid #0f0;"><br>');
+            
+            // Replace newlines with <br>
+            return escaped.replace(/\n/g, '<br>');
+        }
+
         // Sector 17 Logic
         async function submitSector17() {
             const input = document.getElementById('sector17Input');
@@ -1029,18 +1045,18 @@
                              
                              // Update logs
                              if (taskData.logs && taskData.logs.length > 0) {
-                                 status.innerText = taskData.logs.join('\n');
+                                 status.innerHTML = formatLog(taskData.logs.join('\n'));
                                  // Auto scroll to bottom
                                  status.scrollTop = status.scrollHeight;
                              }
                              
                              if (taskData.status === 'completed') {
                                  clearInterval(poll);
-                                 status.innerText += '\n\nCOMPLETED.';
+                                 status.innerHTML += '<br><br>COMPLETED.';
                                  btn.disabled = false;
                              } else if (taskData.status === 'failed') {
                                  clearInterval(poll);
-                                 status.innerText += '\n\nFAILED: ' + (taskData.error || 'Unknown');
+                                 status.innerHTML += '<br><br>FAILED: ' + (taskData.error || 'Unknown');
                                  btn.disabled = false;
                              }
                          } catch (e) {
@@ -1088,17 +1104,17 @@
                              const taskData = await checkRes.json();
                              
                              if (taskData.logs && taskData.logs.length > 0) {
-                                 status.innerText = taskData.logs.join('\n');
+                                 status.innerHTML = formatLog(taskData.logs.join('\n'));
                                  status.scrollTop = status.scrollHeight;
                              }
                              
                              if (taskData.status === 'completed') {
                                  clearInterval(poll);
-                                 status.innerText += '\n\nCOMPLETED.\n\n' + (taskData.result.content || '');
+                                 status.innerHTML += '<br><br>COMPLETED.<br><br>' + formatLog(taskData.result.content || '');
                                  btn.disabled = false;
                              } else if (taskData.status === 'failed') {
                                  clearInterval(poll);
-                                 status.innerText += '\n\nFAILED: ' + (taskData.error || 'Unknown');
+                                 status.innerHTML += '<br><br>FAILED: ' + (taskData.error || 'Unknown');
                                  btn.disabled = false;
                              }
                          } catch (e) {

@@ -318,6 +318,9 @@ def call_llm_vlm(prompt_text: str, images: List[Image.Image], log_callback=None)
         log_callback(f"Human Prompt:\n{prompt_text}")
         log_callback(f"System Prompt: (Using default for {LLM_MODEL})")
         log_callback(f"Image Count: {len(images)}")
+        log_callback(f"LLM Model: {LLM_MODEL}")
+        log_callback(f"LLM Base URL: {LLM_BASE_URL}")
+
     
     api_key = os.getenv("ZAI_API_KEY")
     if not api_key:
