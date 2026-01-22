@@ -275,7 +275,12 @@
                     <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 </div>
                 <div class="grid-content">
-                    <h2>Sector17</h2>
+                    <h2>台词扩写</h2>
+                    <div class="i2v-container">
+                        <input type="text" id="sector17Input" class="upload-input i2v-text-input" placeholder="输入台词或关键词" style="width: 100%;">
+                        <button type="button" class="action-btn" onclick="submitSector17()">SUBMIT</button>
+                    </div>
+                    <div id="sector17Status" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
                 </div>
             </div>
             <div class="grid-item item-18">
@@ -283,7 +288,10 @@
                     <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 </div>
                 <div class="grid-content">
-                    <h2>Sector18</h2>
+                    <h2>提示词代写 <button type="button" class="inline-refresh-btn" onclick="refreshSector18()" aria-label="刷新"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></h2>
+                    <textarea id="sector18Text" style="width: 100%; height: 60%; background: #000; color: #0f0; border: 1px solid #333; font-family: 'Courier New', monospace; resize: none;" readonly></textarea>
+                    <button type="button" class="action-btn" onclick="copySector18()" style="margin-top: 5px;">COPY TO CLIPBOARD</button>
+                    <div id="sector18Status" style="margin-top: 2px; font-size: 0.7em;"></div>
                 </div>
             </div>
             <div class="grid-item item-19">
@@ -407,6 +415,89 @@
     </div>
 
     <script>
+        // Sector 17 Logic
+        async function submitSector17() {
+            const input = document.getElementById('sector17Input');
+            const statusDiv = document.getElementById('sector17Status');
+            const btn = document.querySelector('#sector17Input + button');
+            
+            const text = input.value.trim();
+            if (!text) {
+                statusDiv.innerText = '请输入内容';
+                statusDiv.style.color = 'red';
+                return;
+            }
+            
+            statusDiv.innerText = 'PROCESSING...';
+            statusDiv.style.color = '#0f0';
+            btn.disabled = true;
+            input.disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('text', text);
+                
+                const response = await fetch('/sector17_submit', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerText = 'SUCCESS: ' + data.url;
+                    statusDiv.style.color = '#0f0';
+                } else {
+                    statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown error');
+                    statusDiv.style.color = 'red';
+                }
+            } catch (e) {
+                statusDiv.innerText = 'NETWORK ERROR: ' + e.message;
+                statusDiv.style.color = 'red';
+            } finally {
+                btn.disabled = false;
+                input.disabled = false;
+            }
+        }
+
+        // Sector 18 Logic
+        async function refreshSector18() {
+            const textarea = document.getElementById('sector18Text');
+            const statusDiv = document.getElementById('sector18Status');
+            
+            statusDiv.innerText = 'LOADING...';
+            textarea.value = '';
+            
+            try {
+                const response = await fetch('/sector18_get_prompt');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    textarea.value = data.content;
+                    statusDiv.innerText = 'UPDATED';
+                    setTimeout(() => statusDiv.innerText = '', 2000);
+                } else {
+                    statusDiv.innerText = 'ERROR: ' + (data.error || 'Fetch failed');
+                }
+            } catch (e) {
+                statusDiv.innerText = 'ERROR: ' + e.message;
+            }
+        }
+        
+        function copySector18() {
+            const textarea = document.getElementById('sector18Text');
+            const statusDiv = document.getElementById('sector18Status');
+            
+            textarea.select();
+            document.execCommand('copy');
+            
+            statusDiv.innerText = 'COPIED!';
+            setTimeout(() => statusDiv.innerText = '', 2000);
+        }
+
+        // Auto load sector 18 on page load (optional, but good for UX)
+        // refreshSector18();
+
         // Fullscreen Logic
         function goFullscreen(elem) {
             elem.classList.add('fullscreen');
@@ -973,6 +1064,82 @@
         }
 
 
+        // Sector 17 Logic
+        async function submitSector17() {
+            const input = document.getElementById('sector17Input');
+            const status = document.getElementById('sector17Status');
+            const btn = document.querySelector('.item-17 .action-btn');
+            
+            if (!input.value) {
+                status.innerText = '请输入台词或关键词';
+                return;
+            }
+            
+            status.innerText = 'PROCESSING... (May take a few minutes)';
+            btn.disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('text', input.value);
+                
+                const resp = await fetch('/sector17_submit', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await resp.json();
+                
+                if (resp.ok) {
+                    status.innerText = 'SUCCESS. Saved to OBS prompt.txt.';
+                } else {
+                    status.innerText = 'ERROR: ' + (data.error || 'Unknown');
+                }
+            } catch (e) {
+                status.innerText = 'SYSTEM ERROR: ' + e.message;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Sector 18 Logic
+        async function refreshSector18() {
+            const textarea = document.getElementById('sector18Text');
+            const status = document.getElementById('sector18Status');
+            
+            status.innerText = 'FETCHING...';
+            try {
+                const resp = await fetch('/sector18_get_prompt');
+                const data = await resp.json();
+                
+                if (resp.ok) {
+                    textarea.value = data.content;
+                    status.innerText = 'UPDATED: ' + new Date().toLocaleTimeString();
+                } else {
+                    status.innerText = 'ERROR: ' + (data.error || 'Unknown');
+                }
+            } catch (e) {
+                status.innerText = 'SYSTEM ERROR: ' + e.message;
+            }
+        }
+
+        function copySector18() {
+            const textarea = document.getElementById('sector18Text');
+            const status = document.getElementById('sector18Status');
+            
+            textarea.select();
+            textarea.setSelectionRange(0, 99999); // For mobile devices
+            
+            try {
+                navigator.clipboard.writeText(textarea.value).then(() => {
+                    status.innerText = 'COPIED TO CLIPBOARD';
+                    setTimeout(() => { status.innerText = ''; }, 2000);
+                });
+            } catch (err) {
+                 // Fallback
+                 document.execCommand('copy');
+                 status.innerText = 'COPIED (Fallback)';
+            }
+        }
     </script>
 </body>
 </html>

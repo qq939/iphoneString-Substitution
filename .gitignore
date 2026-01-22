@@ -7,3 +7,4 @@ bin/
 langchain/
 .log/
 .trae/skills/
+.env

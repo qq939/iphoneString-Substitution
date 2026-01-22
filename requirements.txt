@@ -5,3 +5,11 @@ websocket-client
 pydub
 opencv-python-headless
 Pillow
+yt-dlp
+ultralytics
+langchain
+langchain-openai
+imageio-ffmpeg
+numpy
+python-dotenv
+

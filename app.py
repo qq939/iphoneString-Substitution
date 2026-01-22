@@ -15,6 +15,7 @@ from PIL import Image
 import comfy_utils
 import obs_utils
 import ffmpeg_utils
+import extractor_utils
 
 # Add local bin directory to PATH for ffmpeg/ffprobe
 local_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
@@ -1778,6 +1779,73 @@ def save_character_from_current():
         return jsonify({'status': 'success', 'url': obs_url})
     except Exception as e:
         print(f"Error saving character from current video: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/sector17_submit', methods=['POST'])
+def sector17_submit():
+    text = request.form.get('text')
+    if not text:
+        return jsonify({'error': 'No text provided'}), 400
+        
+    try:
+        # 1. Run extractor logic
+        # Output dir for temp files
+        output_dir = os.path.join(UPLOAD_FOLDER, f"sector17_{uuid.uuid4()}")
+        
+        # Ensure UPLOAD_FOLDER exists
+        if not os.path.exists(UPLOAD_FOLDER):
+            os.makedirs(UPLOAD_FOLDER)
+            
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        prompt = extractor_utils.process_query_to_prompt(text, output_dir)
+        
+        if prompt.startswith("Error:"):
+            # Cleanup
+            try:
+                shutil.rmtree(output_dir)
+            except:
+                pass
+            return jsonify({'error': prompt}), 500
+            
+        # 2. Save to local file
+        prompt_filename = "prompt.txt"
+        prompt_path = os.path.join(output_dir, prompt_filename)
+        with open(prompt_path, 'w', encoding='utf-8') as f:
+            f.write(prompt)
+            
+        # 3. Upload to OBS
+        obs_url = obs_utils.upload_file(prompt_path, prompt_filename, mime_type='text/plain')
+        
+        # Cleanup
+        try:
+            shutil.rmtree(output_dir)
+        except:
+            pass
+            
+        if obs_url:
+            return jsonify({'status': 'success', 'url': obs_url})
+        else:
+            return jsonify({'error': 'Failed to upload to OBS'}), 500
+            
+    except Exception as e:
+        print(f"Sector 17 Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/sector18_get_prompt', methods=['GET'])
+def sector18_get_prompt():
+    try:
+        obs_url = "http://obs.dimond.top/prompt.txt"
+        # Add random query param to bypass cache
+        response = requests.get(f"{obs_url}?t={int(time.time())}", timeout=10)
+        if response.status_code == 200:
+            # Force encoding if needed, usually utf-8
+            response.encoding = 'utf-8'
+            return jsonify({'status': 'success', 'content': response.text})
+        else:
+            return jsonify({'error': f'Failed to fetch from OBS: {response.status_code}'}), 502
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
