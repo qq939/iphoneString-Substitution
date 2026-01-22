@@ -11,12 +11,12 @@ RUN mkdir -p /app /var/log \
     && apt-get update && apt-get install -y \
         python3 \
         python3-pip \
-        ffmpeg \  # 系统级ffmpeg，替代static-ffmpeg
-    && rm -rf /var/lib/apt/lists/* \  # 清理apt缓存
-    && chmod 777 /var/log/ \  # 替换777，更安全
-    && chmod 777 /app/ \  # 替换777，更安全
+        ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod 777 /var/log/ \
+    && chmod 777 /app/ \
     && pip3 install --upgrade pip \
-    && rm -rf ~/.cache/pip  # 清理pip升级缓存
+    && rm -rf ~/.cache/pip
 
 
 
