@@ -1774,13 +1774,93 @@ def save_character_from_current():
         print(f"Error saving character from current video: {e}")
         return jsonify({'error': str(e)}), 500
 
+def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
+    """
+    Helper to trigger an I2V task from Sector 17/19 results.
+    """
+    try:
+        if log_callback: log_callback("Preparing I2V submission...")
+        
+        # Ensure ComfyUI connection
+        try:
+            ensure_comfy_connection()
+        except Exception as e:
+            if log_callback: log_callback(f"ComfyUI Connection Failed: {e}")
+            return None
+        
+        # Upload image to ComfyUI
+        if not image_path or not os.path.exists(image_path):
+             if log_callback: log_callback("No reference image found for I2V.")
+             return None
+             
+        if log_callback: log_callback(f"Uploading reference image to ComfyUI...")
+        upload_res = comfy_utils.client.upload_file(image_path)
+        if not upload_res or 'name' not in upload_res:
+             if log_callback: log_callback("Failed to upload reference image to ComfyUI")
+             return None
+        image_name = upload_res['name']
+        
+        # Load workflow
+        workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '图生视频video_wan2_2_14B_i2v.json')
+        if not os.path.exists(workflow_path):
+             if log_callback: log_callback("I2V Workflow file not found")
+             return None
+             
+        with open(workflow_path, 'r', encoding='utf-8') as f:
+            workflow = json.load(f)
+            
+        # Modify workflow
+        workflow = modify_i2v_workflow(workflow, image_name, prompt)
+        
+        # Submit
+        if log_callback: log_callback("Submitting to ComfyUI...")
+        try:
+            prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
+        except Exception as e:
+            if log_callback: log_callback(f"Queue Prompt Failed: {e}")
+            return None
+        
+        if prompt_id:
+            # Create a new group for monitoring
+            group_id = str(uuid.uuid4())
+            TASKS_STORE[group_id] = {
+                'status': 'processing',
+                'tasks': [{
+                    'task_id': prompt_id,
+                    'server': server_address,
+                    'status': 'pending',
+                    'segment_index': 0,
+                    'result_path': None,
+                }],
+                'created_at': time.time(),
+                'workflow_type': 'i2v_auto', 
+                'audio_path': None,
+            }
+            
+            # Start monitor
+            thread = threading.Thread(target=monitor_i2v_group, args=(group_id,))
+            thread.daemon = True
+            thread.start()
+            
+            if log_callback: log_callback(f"I2V Task started successfully! Group ID: {group_id}")
+            return group_id
+        else:
+            if log_callback: log_callback("Failed to get prompt_id from ComfyUI")
+            return None
+            
+    except Exception as e:
+        if log_callback: log_callback(f"I2V Trigger Error: {e}")
+        print(f"I2V Trigger Error: {e}")
+        return None
+
 def run_sector17_task(task_id, text, output_dir):
     try:
         def log_callback(msg):
             if task_id in SECTOR_TASKS:
                 SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
         
-        prompt = extractor_utils.process_query_to_prompt(text, output_dir, log_callback=log_callback)
+        # Unpack prompt and image_path
+        prompt, image_path = extractor_utils.process_query_to_prompt(text, output_dir, log_callback=log_callback)
         
         if prompt.startswith("Error:"):
             SECTOR_TASKS[task_id]['status'] = 'failed'
@@ -1800,6 +1880,10 @@ def run_sector17_task(task_id, text, output_dir):
                 SECTOR_TASKS[task_id]['status'] = 'completed'
                 SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
                 log_callback("Task completed successfully.")
+                
+                # Trigger I2V
+                trigger_i2v_for_sector(prompt, image_path, log_callback=log_callback)
+                
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
@@ -1810,6 +1894,9 @@ def run_sector17_task(task_id, text, output_dir):
     finally:
          # Cleanup
         try:
+            # We might want to keep output_dir for a bit if debugging, but standard logic is remove
+            # However, if I2V needs the image, we should check if trigger_i2v_for_sector already uploaded it.
+            # trigger_i2v_for_sector uploads it synchronously. So we can delete here.
             shutil.rmtree(output_dir)
         except:
             pass
@@ -1821,7 +1908,7 @@ def run_sector19_task(task_id, video_path, output_dir):
                 SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
         
         # Analyze
-        prompt = extractor_utils.analyze_video(video_path, extractor_utils.RESOURCE_DIR, log_callback=log_callback)
+        prompt, image_path = extractor_utils.analyze_video(video_path, extractor_utils.RESOURCE_DIR, log_callback=log_callback)
         
         if prompt.startswith("Error:"):
             SECTOR_TASKS[task_id]['status'] = 'failed'
@@ -1841,6 +1928,9 @@ def run_sector19_task(task_id, video_path, output_dir):
                 SECTOR_TASKS[task_id]['status'] = 'completed'
                 SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
                 log_callback("Task completed successfully.")
+                
+                # Trigger I2V
+                trigger_i2v_for_sector(prompt, image_path, log_callback=log_callback)
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"

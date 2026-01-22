@@ -19,7 +19,8 @@ from langchain_core.messages import HumanMessage
 import dotenv
 
 # Load environment variables
-dotenv.load_dotenv('asset/.env')
+dotenv.load_dotenv()
+dotenv.load_dotenv("asset/.env")
 
 # ========== GLOBAL PARAMETERS ==========
 
@@ -458,13 +459,30 @@ def analyze_video(video_path: str, resource_dir: str, log_callback=None) -> str:
     
     # 4. Call LLM
     if log_callback: log_callback("Calling LLM for analysis...")
-    return call_llm_vlm(prompt, grid_images, log_callback=log_callback)
+    
+    # Get the first captured image as reference for I2V
+    reference_image_path = None
+    if captured_images:
+        # Save the first frame (without time overlay if possible? captured_images has time overlay)
+        # We want the clean frame ideally, but we only have overlayed ones in captured_images.
+        # Wait, captured_images has time overlay drawn on it.
+        # "draw_time_on_image" modifies it in place or returns new? It returns new PIL image.
+        # But we overwrite captured_images list with them.
+        # It's fine, let's use the one with time or just use the first grid image?
+        # Actually, let's use the first extracted frame.
+        ref_img = captured_images[0]
+        reference_image_path = os.path.join(resource_output_dir, "reference_frame.jpg")
+        ref_img.save(reference_image_path)
+        if log_callback: log_callback(f"Saved reference frame to: {reference_image_path}")
+
+    prompt_content = call_llm_vlm(prompt, grid_images, log_callback=log_callback)
+    return prompt_content, reference_image_path
 
 # ========== MAIN WORKFLOW ==========
 
-def process_query_to_prompt(query: str, output_dir: str, log_callback=None) -> str:
+def process_query_to_prompt(query: str, output_dir: str, log_callback=None) -> tuple[str, str | None]:
     """
-    Full workflow: Search -> Download -> Analyze -> Return Prompt
+    Full workflow: Search -> Download -> Analyze -> Return (Prompt, ImagePath)
     """
     if log_callback: log_callback(f"Processing query: {query}")
     print(f"Processing query: {query}")
@@ -473,7 +491,7 @@ def process_query_to_prompt(query: str, output_dir: str, log_callback=None) -> s
     if log_callback: log_callback("Searching Bilibili...")
     video_url = search_bilibili(query)
     if not video_url:
-        return "Error: Video not found for query."
+        return "Error: Video not found for query.", None
         
     print(f"Found video: {video_url}")
     if log_callback: log_callback(f"Found video URL: {video_url}")
@@ -482,15 +500,15 @@ def process_query_to_prompt(query: str, output_dir: str, log_callback=None) -> s
     if log_callback: log_callback("Downloading video...")
     video_path = download_video(video_url, output_dir)
     if not video_path:
-        return "Error: Video download failed."
+        return "Error: Video download failed.", None
         
     print(f"Video downloaded to: {video_path}")
     if log_callback: log_callback(f"Video downloaded to: {video_path}")
     
     # 3. Analyze
-    prompt = analyze_video(video_path, RESOURCE_DIR, log_callback=log_callback)
+    prompt, image_path = analyze_video(video_path, RESOURCE_DIR, log_callback=log_callback)
     
     # Cleanup downloaded video (optional, maybe keep it?)
     # For now, let's keep it as per original logic which saved it to output_dir
     
-    return prompt
+    return prompt, image_path
