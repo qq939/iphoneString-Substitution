@@ -2004,6 +2004,37 @@ def sector19_submit():
     
     return jsonify({'status': 'processing', 'task_id': task_id})
 
+@app.route('/video_analyzing', methods=['POST'])
+def video_analyzing():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+        
+    video_file = request.files['file']
+    if video_file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+        
+    task_id = str(uuid.uuid4())
+    output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
+    
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        
+    video_path = os.path.join(output_dir, video_file.filename)
+    video_file.save(video_path)
+    
+    SECTOR_TASKS[task_id] = {
+        'status': 'processing',
+        'logs': [],
+        'created_at': time.time(),
+        'type': 'sector19'
+    }
+    
+    threading.Thread(target=run_sector19_task, args=(task_id, video_path, output_dir)).start()
+    
+    return jsonify({'status': 'processing', 'task_id': task_id})
+
 @app.route('/check_sector_task/<task_id>', methods=['GET'])
 def check_sector_task(task_id):
     task = SECTOR_TASKS.get(task_id)
