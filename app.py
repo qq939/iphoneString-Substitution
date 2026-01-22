@@ -770,6 +770,8 @@ def process_digital_human_video(audio_path, input_video_path=None):
                             
                             if obs_url:
                                 print(f"Digital human video successfully uploaded: {obs_url}")
+                                # Send email notification
+                                send_email("Digital Human Video Completed", obs_url)
                             else:
                                 print("Failed to upload digital human video to OBS")
                         else:
@@ -850,6 +852,9 @@ def process_audio_result(prompt_id, result):
                     # Trigger Digital Human Video Generation (Stage 2)
                     # We do this in a background thread to avoid blocking the response
                     print(f"Audio upload successful. Triggering digital human video generation with {local_renamed_path}")
+                    
+                    # Send email notification
+                    send_email("Audio Generation Completed", obs_url)
                     
                     input_video_path = None
                     with AUDIO_LOCK:
@@ -1358,6 +1363,9 @@ def monitor_i2v_group(group_id):
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
                         print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
+                        
+                        # Send email notification
+                        send_email("Image-to-Video (I2V) Task Completed", obs_url)
                         
                         # Trigger automatic flow for Sectors 9, 10, 11, 12 -> 13, 14, 15, 16
                         # Iterate through ALL tasks to trigger corresponding channels
@@ -1943,6 +1951,9 @@ def run_sector19_task(task_id, video_path, output_dir):
                 SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
                 SECTOR_TASKS[task_id]['status'] = 'completed'
                 log_callback("Task completed successfully.")
+
+                # Send email notification
+                send_email("Video Analysis (Sector 19) Task Completed", obs_url)
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
