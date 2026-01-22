@@ -19,7 +19,7 @@ from langchain_core.messages import HumanMessage
 import dotenv
 
 # Load environment variables
-dotenv.load_dotenv()
+dotenv.load_dotenv('asset/.env')
 
 # ========== GLOBAL PARAMETERS ==========
 
