@@ -24,15 +24,18 @@ RUN mkdir -p /app /var/log \
 # 工作目录
 WORKDIR /app
 
-# 创建容器内的虚拟环境（核心：避开系统pip的保护机制）
+# 第二步：先创建虚拟环境（关键！避开系统pip保护）
 RUN python3 -m venv /app/venv
+
+# 第三步：用虚拟环境的pip升级pip（不再用系统pip3）
+RUN /app/venv/bin/pip install --upgrade pip \
+    && rm -rf ~/.cache/pip
 
 # 先拷贝依赖文件，利用Docker缓存
 COPY requirements.txt /app/
 
-# 用虚拟环境的pip安装/升级包（无系统冲突）
-RUN /app/venv/bin/pip install --upgrade pip \
-    && /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt \
+# 用虚拟环境的pip安装项目依赖
+RUN /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt \
     && rm -rf ~/.cache/pip
 
 # 最后拷贝项目代码
