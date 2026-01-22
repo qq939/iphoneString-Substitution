@@ -13,3 +13,4 @@ static-ffmpeg
 numpy
 python-dotenv
 
+playwright

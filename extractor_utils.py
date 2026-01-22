@@ -414,6 +414,12 @@ def analyze_video(video_path: str, resource_dir: str, log_callback=None) -> str:
         if grid_img:
             grid_images.append(grid_img)
             
+    for i, img in enumerate(grid_images):
+        grid_filename = f"grid_{i}.jpg"
+        grid_path = os.path.join(resource_output_dir, grid_filename)
+        img.save(grid_path)
+        if log_callback: log_callback(f"Saved grid image to: {grid_path}")
+
     # Limit number of grid images to avoid LLM API limits (e.g. Zhipu limit)
     # If we have too many, sample them uniformly
     MAX_GRID_IMAGES = 4
