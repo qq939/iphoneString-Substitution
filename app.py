@@ -1798,7 +1798,27 @@ def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
         except Exception as e:
             if log_callback: log_callback(f"ComfyUI Connection Failed: {e}")
             return None
+            
+        # Download character.png from OBS to use as reference frame
+        if log_callback: log_callback("Downloading character.png from OBS for I2V reference...")
+        character_url = "http://obs.dimond.top/character.png"
+        character_path = os.path.join(UPLOAD_FOLDER, f"i2v_character_{uuid.uuid4()}.png")
+        download_success = False
         
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            with requests.get(character_url, stream=True, timeout=30, headers=headers) as r:
+                if r.status_code == 200:
+                    with open(character_path, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    image_path = character_path
+                    download_success = True
+                else:
+                    if log_callback: log_callback(f"Failed to download character from OBS: {r.status_code}. Using extracted frame instead.")
+        except Exception as e:
+             if log_callback: log_callback(f"Error downloading character from OBS: {e}. Using extracted frame instead.")
+
         # Upload image to ComfyUI
         if not image_path or not os.path.exists(image_path):
              if log_callback: log_callback("No reference image found for I2V.")
@@ -1806,6 +1826,14 @@ def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
              
         if log_callback: log_callback(f"Uploading reference image to ComfyUI: {image_path}")
         upload_res = comfy_utils.client.upload_file(image_path)
+        
+        # Cleanup temporary character file
+        if download_success and os.path.exists(character_path):
+            try:
+                os.remove(character_path)
+            except:
+                pass
+
         if not upload_res or 'name' not in upload_res:
              if log_callback: log_callback("Failed to upload reference image to ComfyUI")
              return None
