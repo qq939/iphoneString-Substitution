@@ -1825,7 +1825,7 @@ def sector17_submit():
             pass
             
         if obs_url:
-            return jsonify({'status': 'success', 'url': obs_url})
+            return jsonify({'status': 'success', 'url': obs_url, 'content': prompt})
         else:
             return jsonify({'error': 'Failed to upload to OBS'}), 500
             

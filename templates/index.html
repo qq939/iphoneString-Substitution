@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hacker Grid</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2">
 </head>
 <body>
     <div class="page-container">
@@ -415,89 +415,6 @@
     </div>
 
     <script>
-        // Sector 17 Logic
-        async function submitSector17() {
-            const input = document.getElementById('sector17Input');
-            const statusDiv = document.getElementById('sector17Status');
-            const btn = document.querySelector('#sector17Input + button');
-            
-            const text = input.value.trim();
-            if (!text) {
-                statusDiv.innerText = '请输入内容';
-                statusDiv.style.color = 'red';
-                return;
-            }
-            
-            statusDiv.innerText = 'PROCESSING...';
-            statusDiv.style.color = '#0f0';
-            btn.disabled = true;
-            input.disabled = true;
-            
-            try {
-                const formData = new FormData();
-                formData.append('text', text);
-                
-                const response = await fetch('/sector17_submit', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    statusDiv.innerText = 'SUCCESS: ' + data.url;
-                    statusDiv.style.color = '#0f0';
-                } else {
-                    statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown error');
-                    statusDiv.style.color = 'red';
-                }
-            } catch (e) {
-                statusDiv.innerText = 'NETWORK ERROR: ' + e.message;
-                statusDiv.style.color = 'red';
-            } finally {
-                btn.disabled = false;
-                input.disabled = false;
-            }
-        }
-
-        // Sector 18 Logic
-        async function refreshSector18() {
-            const textarea = document.getElementById('sector18Text');
-            const statusDiv = document.getElementById('sector18Status');
-            
-            statusDiv.innerText = 'LOADING...';
-            textarea.value = '';
-            
-            try {
-                const response = await fetch('/sector18_get_prompt');
-                const data = await response.json();
-                
-                if (response.ok) {
-                    textarea.value = data.content;
-                    statusDiv.innerText = 'UPDATED';
-                    setTimeout(() => statusDiv.innerText = '', 2000);
-                } else {
-                    statusDiv.innerText = 'ERROR: ' + (data.error || 'Fetch failed');
-                }
-            } catch (e) {
-                statusDiv.innerText = 'ERROR: ' + e.message;
-            }
-        }
-        
-        function copySector18() {
-            const textarea = document.getElementById('sector18Text');
-            const statusDiv = document.getElementById('sector18Status');
-            
-            textarea.select();
-            document.execCommand('copy');
-            
-            statusDiv.innerText = 'COPIED!';
-            setTimeout(() => statusDiv.innerText = '', 2000);
-        }
-
-        // Auto load sector 18 on page load (optional, but good for UX)
-        // refreshSector18();
-
         // Fullscreen Logic
         function goFullscreen(elem) {
             elem.classList.add('fullscreen');

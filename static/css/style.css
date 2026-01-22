@@ -389,3 +389,14 @@ input[type="radio"]:checked {
 .page-nav-prev {
     border-right: 1px solid var(--border-color);
 }
+
+/* Page Visibility Logic */
+.page {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+}
+
+.page.active {
+    display: grid;
+}
