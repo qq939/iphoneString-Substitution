@@ -349,10 +349,12 @@ def call_llm_vlm(prompt_text: str, images: List[Image.Image]) -> str:
         print(f"LLM Call Error: {e}")
         return f"Error calling LLM: {e}"
 
-def analyze_video(video_path: str, resource_dir: str) -> str:
+def analyze_video(video_path: str, resource_dir: str, log_callback=None) -> str:
     """
     Analyze video and generate prompt.
     """
+    if log_callback: log_callback(f"Analyzing video: {video_path}")
+    
     if not video_path:
         return "Error: No video path provided"
         
@@ -361,6 +363,7 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
         os.makedirs(resource_output_dir)
 
     # 1. Open Video
+    if log_callback: log_callback("Opening video file...")
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return "Error: Could not open video"
@@ -376,6 +379,7 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
     
     captured_images = []
     
+    if log_callback: log_callback("Extracting frames (1 fps)...")
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -396,8 +400,11 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
     
     if not captured_images:
         return "Error: No frames captured from video"
-        
+    
+    if log_callback: log_callback(f"Extracted {len(captured_images)} frames.")
+
     # 2. Create Grid Images
+    if log_callback: log_callback("Creating grid images...")
     grid_images = []
     chunk_size = GRID_SIZE * GRID_SIZE
     
@@ -411,9 +418,12 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
     # If we have too many, sample them uniformly
     MAX_GRID_IMAGES = 4
     if len(grid_images) > MAX_GRID_IMAGES:
+        if log_callback: log_callback(f"Sampling {MAX_GRID_IMAGES} grid images from {len(grid_images)}...")
         indices = np.linspace(0, len(grid_images) - 1, MAX_GRID_IMAGES, dtype=int)
         grid_images = [grid_images[i] for i in indices]
-            
+    
+    if log_callback: log_callback(f"Prepared {len(grid_images)} grid images for analysis.")
+
     # 3. Construct Prompt
     context = ""
     if os.path.exists(resource_dir):
@@ -425,6 +435,7 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
                         context += f"\n[{filename}]: {f.read()}"
         except Exception as e:
             print(f"Error reading resources: {e}")
+            if log_callback: log_callback(f"Warning: Error reading resources: {e}")
             
     prompt = f"""
     用400字描述视频截图内容，突出人物动作和场景描述。
@@ -434,32 +445,38 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
     """
     
     # 4. Call LLM
+    if log_callback: log_callback("Calling LLM for analysis...")
     return call_llm_vlm(prompt, grid_images)
 
 # ========== MAIN WORKFLOW ==========
 
-def process_query_to_prompt(query: str, output_dir: str) -> str:
+def process_query_to_prompt(query: str, output_dir: str, log_callback=None) -> str:
     """
     Full workflow: Search -> Download -> Analyze -> Return Prompt
     """
+    if log_callback: log_callback(f"Processing query: {query}")
     print(f"Processing query: {query}")
     
     # 1. Search
+    if log_callback: log_callback("Searching Bilibili...")
     video_url = search_bilibili(query)
     if not video_url:
         return "Error: Video not found for query."
         
     print(f"Found video: {video_url}")
+    if log_callback: log_callback(f"Found video URL: {video_url}")
     
     # 2. Download
+    if log_callback: log_callback("Downloading video...")
     video_path = download_video(video_url, output_dir)
     if not video_path:
         return "Error: Video download failed."
         
     print(f"Video downloaded to: {video_path}")
+    if log_callback: log_callback(f"Video downloaded to: {video_path}")
     
     # 3. Analyze
-    prompt = analyze_video(video_path, RESOURCE_DIR)
+    prompt = analyze_video(video_path, RESOURCE_DIR, log_callback=log_callback)
     
     # Cleanup downloaded video (optional, maybe keep it?)
     # For now, let's keep it as per original logic which saved it to output_dir

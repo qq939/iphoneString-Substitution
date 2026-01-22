@@ -81,6 +81,7 @@ status_thread = threading.Thread(target=check_comfy_status, daemon=True)
 status_thread.start()
 
 TASKS_STORE = {}  # Used in: upload_and_cut, generate_i2v_group, monitor_group_task, _add_transition_video_to_group, check_group_status
+SECTOR_TASKS = {} # Used in: sector17_submit, sector19_submit, check_sector_task
 AUDIO_TASKS = {}  # Used in: upload_audio, check_audio_status, process_audio_result
 AUDIO_LOCK = threading.Lock()  # Used in: concurrent audio task state protection
 WAIT_OVERTIME_SECONDS = 6 * 60 * 60  # Used in: monitor_group_task timeout control
@@ -1773,57 +1774,139 @@ def save_character_from_current():
         print(f"Error saving character from current video: {e}")
         return jsonify({'error': str(e)}), 500
 
+def run_sector17_task(task_id, text, output_dir):
+    try:
+        def log_callback(msg):
+            if task_id in SECTOR_TASKS:
+                SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+        
+        prompt = extractor_utils.process_query_to_prompt(text, output_dir, log_callback=log_callback)
+        
+        if prompt.startswith("Error:"):
+            SECTOR_TASKS[task_id]['status'] = 'failed'
+            SECTOR_TASKS[task_id]['error'] = prompt
+        else:
+             # Save and upload
+            log_callback("Saving prompt.txt...")
+            prompt_filename = "prompt.txt"
+            prompt_path = os.path.join(output_dir, prompt_filename)
+            with open(prompt_path, 'w', encoding='utf-8') as f:
+                f.write(prompt)
+            
+            log_callback("Uploading to OBS...")
+            obs_url = obs_utils.upload_file(prompt_path, prompt_filename, mime_type='text/plain')
+            
+            if obs_url:
+                SECTOR_TASKS[task_id]['status'] = 'completed'
+                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
+                log_callback("Task completed successfully.")
+            else:
+                SECTOR_TASKS[task_id]['status'] = 'failed'
+                SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
+                
+    except Exception as e:
+        SECTOR_TASKS[task_id]['status'] = 'failed'
+        SECTOR_TASKS[task_id]['error'] = str(e)
+    finally:
+         # Cleanup
+        try:
+            shutil.rmtree(output_dir)
+        except:
+            pass
+
+def run_sector19_task(task_id, video_path, output_dir):
+    try:
+        def log_callback(msg):
+            if task_id in SECTOR_TASKS:
+                SECTOR_TASKS[task_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+        
+        # Analyze
+        prompt = extractor_utils.analyze_video(video_path, extractor_utils.RESOURCE_DIR, log_callback=log_callback)
+        
+        if prompt.startswith("Error:"):
+            SECTOR_TASKS[task_id]['status'] = 'failed'
+            SECTOR_TASKS[task_id]['error'] = prompt
+        else:
+            SECTOR_TASKS[task_id]['status'] = 'completed'
+            SECTOR_TASKS[task_id]['result'] = {'content': prompt}
+            log_callback("Task completed successfully.")
+            
+    except Exception as e:
+        SECTOR_TASKS[task_id]['status'] = 'failed'
+        SECTOR_TASKS[task_id]['error'] = str(e)
+    finally:
+         # Cleanup
+        try:
+            if os.path.exists(video_path):
+                os.remove(video_path)
+            if os.path.exists(output_dir):
+                shutil.rmtree(output_dir)
+        except:
+            pass
+
 @app.route('/sector17_submit', methods=['POST'])
 def sector17_submit():
     text = request.form.get('text')
     if not text:
         return jsonify({'error': 'No text provided'}), 400
         
-    try:
-        # 1. Run extractor logic
-        # Output dir for temp files
-        output_dir = os.path.join(UPLOAD_FOLDER, f"sector17_{uuid.uuid4()}")
+    task_id = str(uuid.uuid4())
+    output_dir = os.path.join(UPLOAD_FOLDER, f"sector17_{task_id}")
+    
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
         
-        # Ensure UPLOAD_FOLDER exists
-        if not os.path.exists(UPLOAD_FOLDER):
-            os.makedirs(UPLOAD_FOLDER)
-            
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+    SECTOR_TASKS[task_id] = {
+        'status': 'processing',
+        'logs': [],
+        'created_at': time.time(),
+        'type': 'sector17'
+    }
+    
+    threading.Thread(target=run_sector17_task, args=(task_id, text, output_dir)).start()
+    
+    return jsonify({'status': 'processing', 'task_id': task_id})
+
+@app.route('/sector19_submit', methods=['POST'])
+def sector19_submit():
+    if 'video' not in request.files:
+        return jsonify({'error': 'No video file provided'}), 400
         
-        prompt = extractor_utils.process_query_to_prompt(text, output_dir)
+    video_file = request.files['video']
+    if video_file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
         
-        if prompt.startswith("Error:"):
-            # Cleanup
-            try:
-                shutil.rmtree(output_dir)
-            except:
-                pass
-            return jsonify({'error': prompt}), 500
-            
-        # 2. Save to local file
-        prompt_filename = "prompt.txt"
-        prompt_path = os.path.join(output_dir, prompt_filename)
-        with open(prompt_path, 'w', encoding='utf-8') as f:
-            f.write(prompt)
-            
-        # 3. Upload to OBS
-        obs_url = obs_utils.upload_file(prompt_path, prompt_filename, mime_type='text/plain')
+    task_id = str(uuid.uuid4())
+    output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
+    
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
         
-        # Cleanup
-        try:
-            shutil.rmtree(output_dir)
-        except:
-            pass
-            
-        if obs_url:
-            return jsonify({'status': 'success', 'url': obs_url, 'content': prompt})
-        else:
-            return jsonify({'error': 'Failed to upload to OBS'}), 500
-            
-    except Exception as e:
-        print(f"Sector 17 Error: {e}")
-        return jsonify({'error': str(e)}), 500
+    video_path = os.path.join(output_dir, video_file.filename)
+    video_file.save(video_path)
+    
+    SECTOR_TASKS[task_id] = {
+        'status': 'processing',
+        'logs': [],
+        'created_at': time.time(),
+        'type': 'sector19'
+    }
+    
+    threading.Thread(target=run_sector19_task, args=(task_id, video_path, output_dir)).start()
+    
+    return jsonify({'status': 'processing', 'task_id': task_id})
+
+@app.route('/check_sector_task/<task_id>', methods=['GET'])
+def check_sector_task(task_id):
+    task = SECTOR_TASKS.get(task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    
+    return jsonify(task)
 
 @app.route('/sector18_get_prompt', methods=['GET'])
 def sector18_get_prompt():

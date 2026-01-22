@@ -280,7 +280,7 @@
                         <input type="text" id="sector17Input" class="upload-input i2v-text-input" placeholder="输入台词或关键词" style="width: 100%;">
                         <button type="button" class="action-btn" onclick="submitSector17()">SUBMIT</button>
                     </div>
-                    <div id="sector17Status" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap;"></div>
+                    <div id="sector17Status" style="margin-top: 5px; font-size: 0.7em; white-space: pre-wrap; overflow-y: auto; max-height: 150px; text-align: left;"></div>
                 </div>
             </div>
             <div class="grid-item item-18">
@@ -299,7 +299,12 @@
                     <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
                 </div>
                 <div class="grid-content">
-                    <h2>Sector19</h2>
+                    <h2>标题视频分析</h2>
+                    <form id="sector19Form" style="display: flex; flex-direction: column; height: 80%;">
+                        <input type="file" name="video" accept="video/*" class="upload-input" style="margin-bottom: 5px;">
+                        <button type="submit" class="action-btn">ANALYZE</button>
+                        <div id="sector19Status" style="margin-top: 5px; font-size: 0.7em; overflow-y: auto; flex-grow: 1; white-space: pre-wrap; text-align: left;"></div>
+                    </form>
                 </div>
             </div>
             <div class="grid-item item-20">
@@ -999,31 +1004,117 @@
                 return;
             }
             
-            status.innerText = 'PROCESSING... (May take a few minutes)';
+            status.innerText = 'SUBMITTING...';
             btn.disabled = true;
+            status.innerText = ''; // Clear previous logs
             
             try {
                 const formData = new FormData();
                 formData.append('text', input.value);
                 
-                const resp = await fetch('/sector17_submit', {
+                const res = await fetch('/sector17_submit', {
                     method: 'POST',
                     body: formData
                 });
                 
-                const data = await resp.json();
+                const data = await res.json();
                 
-                if (resp.ok) {
-                    status.innerText = 'SUCCESS. Saved to OBS prompt.txt.';
+                if (data.status === 'processing') {
+                     const taskId = data.task_id;
+                     
+                     const poll = setInterval(async () => {
+                         try {
+                             const checkRes = await fetch(`/check_sector_task/${taskId}`);
+                             const taskData = await checkRes.json();
+                             
+                             // Update logs
+                             if (taskData.logs && taskData.logs.length > 0) {
+                                 status.innerText = taskData.logs.join('\n');
+                                 // Auto scroll to bottom
+                                 status.scrollTop = status.scrollHeight;
+                             }
+                             
+                             if (taskData.status === 'completed') {
+                                 clearInterval(poll);
+                                 status.innerText += '\n\nCOMPLETED.';
+                                 btn.disabled = false;
+                             } else if (taskData.status === 'failed') {
+                                 clearInterval(poll);
+                                 status.innerText += '\n\nFAILED: ' + (taskData.error || 'Unknown');
+                                 btn.disabled = false;
+                             }
+                         } catch (e) {
+                             console.error(e);
+                         }
+                     }, 1000);
+                     
                 } else {
                     status.innerText = 'ERROR: ' + (data.error || 'Unknown');
+                    btn.disabled = false;
                 }
             } catch (e) {
-                status.innerText = 'SYSTEM ERROR: ' + e.message;
-            } finally {
+                status.innerText = 'SYSTEM FAILURE: ' + e.message;
                 btn.disabled = false;
             }
         }
+
+        // Sector 19 Logic
+        document.getElementById('sector19Form').onsubmit = async function(e) {
+            e.preventDefault();
+            const form = this;
+            const status = document.getElementById('sector19Status');
+            const btn = form.querySelector('button[type="submit"]');
+            
+            status.innerText = 'UPLOADING...';
+            btn.disabled = true;
+            status.innerText = '';
+            
+            try {
+                const formData = new FormData(form);
+                
+                const res = await fetch('/sector19_submit', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'processing') {
+                     const taskId = data.task_id;
+                     
+                     const poll = setInterval(async () => {
+                         try {
+                             const checkRes = await fetch(`/check_sector_task/${taskId}`);
+                             const taskData = await checkRes.json();
+                             
+                             if (taskData.logs && taskData.logs.length > 0) {
+                                 status.innerText = taskData.logs.join('\n');
+                                 status.scrollTop = status.scrollHeight;
+                             }
+                             
+                             if (taskData.status === 'completed') {
+                                 clearInterval(poll);
+                                 status.innerText += '\n\nCOMPLETED.\n\n' + (taskData.result.content || '');
+                                 btn.disabled = false;
+                             } else if (taskData.status === 'failed') {
+                                 clearInterval(poll);
+                                 status.innerText += '\n\nFAILED: ' + (taskData.error || 'Unknown');
+                                 btn.disabled = false;
+                             }
+                         } catch (e) {
+                             console.error(e);
+                         }
+                     }, 1000);
+                     
+                } else {
+                    status.innerText = 'ERROR: ' + (data.error || 'Unknown');
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                status.innerText = 'SYSTEM FAILURE: ' + e.message;
+                btn.disabled = false;
+            }
+        };
 
         // Sector 18 Logic
         async function refreshSector18() {
