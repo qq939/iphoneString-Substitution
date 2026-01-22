@@ -15,9 +15,7 @@ RUN mkdir -p /app /var/log \
         ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && chmod 777 /var/log/ \
-    && chmod 777 /app/ \
-    && pip3 install --upgrade pip \
-    && rm -rf ~/.cache/pip
+    && chmod 777 /app/
 
 
 
