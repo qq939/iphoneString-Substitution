@@ -2073,9 +2073,10 @@ def sector18_get_prompt():
         # Add random query param to bypass cache
         response = requests.get(f"{obs_url}?t={int(time.time())}", timeout=10)
         if response.status_code == 200:
-            # Force encoding if needed, usually utf-8
-            response.encoding = 'utf-8'
-            return jsonify({'status': 'success', 'content': response.text})
+            # Use content.decode with replace to handle potential encoding issues and ensure clean string
+            # Also replace NULL bytes just in case
+            content = response.content.decode('utf-8', errors='replace').replace('\x00', '')
+            return jsonify({'status': 'success', 'content': content})
         else:
             return jsonify({'error': f'Failed to fetch from OBS: {response.status_code}'}), 502
     except Exception as e:

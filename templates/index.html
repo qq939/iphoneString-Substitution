@@ -1133,6 +1133,7 @@
                     status.innerText = 'ERROR: ' + (data.error || 'Unknown');
                 }
             } catch (e) {
+                console.error(e);
                 status.innerText = 'SYSTEM ERROR: ' + e.message;
             }
         }
@@ -1141,18 +1142,42 @@
             const textarea = document.getElementById('sector18Text');
             const status = document.getElementById('sector18Status');
             
+            if (!textarea.value) {
+                status.innerText = 'NO CONTENT';
+                return;
+            }
+
             textarea.select();
             textarea.setSelectionRange(0, 99999); // For mobile devices
             
+            // Try using Clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textarea.value)
+                    .then(() => {
+                        status.innerText = 'COPIED TO CLIPBOARD';
+                        setTimeout(() => { status.innerText = ''; }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Clipboard API failed:', err);
+                        fallbackCopy(textarea, status);
+                    });
+            } else {
+                fallbackCopy(textarea, status);
+            }
+        }
+
+        function fallbackCopy(textarea, status) {
             try {
-                navigator.clipboard.writeText(textarea.value).then(() => {
-                    status.innerText = 'COPIED TO CLIPBOARD';
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    status.innerText = 'COPIED (Fallback)';
                     setTimeout(() => { status.innerText = ''; }, 2000);
-                });
+                } else {
+                    status.innerText = 'COPY FAILED (Fallback)';
+                }
             } catch (err) {
-                 // Fallback
-                 document.execCommand('copy');
-                 status.innerText = 'COPIED (Fallback)';
+                console.error('Fallback copy failed:', err);
+                status.innerText = 'COPY FAILED: ' + err.message;
             }
         }
     </script>
