@@ -1827,9 +1827,23 @@ def run_sector19_task(task_id, video_path, output_dir):
             SECTOR_TASKS[task_id]['status'] = 'failed'
             SECTOR_TASKS[task_id]['error'] = prompt
         else:
-            SECTOR_TASKS[task_id]['status'] = 'completed'
-            SECTOR_TASKS[task_id]['result'] = {'content': prompt}
-            log_callback("Task completed successfully.")
+            # Save prompt.txt and upload to OBS
+            log_callback("Saving prompt.txt...")
+            prompt_filename = "prompt.txt"
+            prompt_path = os.path.join(output_dir, prompt_filename)
+            with open(prompt_path, 'w', encoding='utf-8') as f:
+                f.write(prompt)
+            
+            log_callback("Uploading to OBS...")
+            obs_url = obs_utils.upload_file(prompt_path, prompt_filename, mime_type='text/plain')
+            
+            if obs_url:
+                SECTOR_TASKS[task_id]['status'] = 'completed'
+                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
+                log_callback("Task completed successfully.")
+            else:
+                SECTOR_TASKS[task_id]['status'] = 'failed'
+                SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
             
     except Exception as e:
         SECTOR_TASKS[task_id]['status'] = 'failed'
