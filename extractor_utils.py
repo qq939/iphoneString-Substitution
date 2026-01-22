@@ -306,11 +306,17 @@ def encode_image_base64(image: Image.Image) -> str:
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-def call_llm_vlm(prompt_text: str, images: List[Image.Image]) -> str:
+def call_llm_vlm(prompt_text: str, images: List[Image.Image], log_callback=None) -> str:
     """
     Call VLM using LangChain and ChatOpenAI compatible API
     """
     print(f"Calling LLM with {len(images)} images and prompt length: {len(prompt_text)}")
+    
+    if log_callback:
+        log_callback(f"Constructing LLM request...")
+        log_callback(f"Human Prompt:\n{prompt_text}")
+        log_callback(f"System Prompt: (Using default for {LLM_MODEL})")
+        log_callback(f"Image Count: {len(images)}")
     
     api_key = os.getenv("ZAI_API_KEY")
     if not api_key:
@@ -452,7 +458,7 @@ def analyze_video(video_path: str, resource_dir: str, log_callback=None) -> str:
     
     # 4. Call LLM
     if log_callback: log_callback("Calling LLM for analysis...")
-    return call_llm_vlm(prompt, grid_images)
+    return call_llm_vlm(prompt, grid_images, log_callback=log_callback)
 
 # ========== MAIN WORKFLOW ==========
 
