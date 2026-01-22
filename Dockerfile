@@ -11,6 +11,7 @@ RUN mkdir -p /app /var/log \
     && apt-get update && apt-get install -y \
         python3 \
         python3-pip \
+        python3-venv \
         ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && chmod 777 /var/log/ \
@@ -20,25 +21,25 @@ RUN mkdir -p /app /var/log \
 
 
 
-
-
-
-# 工作目录（保留）
+# 工作目录
 WORKDIR /app
 
-# 先拷贝依赖文件（利用Docker缓存）
+# 创建容器内的虚拟环境（核心：避开系统pip的保护机制）
+RUN python3 -m venv /app/venv
+
+# 先拷贝依赖文件，利用Docker缓存
 COPY requirements.txt /app/
 
-# 安装项目依赖（无虚拟环境，清理pip缓存）
-RUN pip3 install --no-cache-dir -r requirements.txt \
-    && rm -rf ~/.cache/pip  # 清理pip安装缓存
+# 用虚拟环境的pip安装/升级包（无系统冲突）
+RUN /app/venv/bin/pip install --upgrade pip \
+    && /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt \
+    && rm -rf ~/.cache/pip
 
-# 最后拷贝项目代码（修改频率高，放最后）
+# 最后拷贝项目代码
 COPY . /app/
 
-# Make port 5015 available to the world outside this container
+# 暴露端口
 EXPOSE 5015
 
-# Use the Python interpreter from the virtual environment to run the application
-CMD ["/bin/sh", "-c", "exec python3 /app/app.py > /var/log/iphonestring.log 2>&1"]
-    
+# 用虚拟环境的python运行程序（和原逻辑一致）
+CMD ["/bin/sh", "-c", "exec /app/venv/bin/python /app/app.py > /var/log/iphonestring.log 2>&1"]
