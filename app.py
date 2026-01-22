@@ -1877,13 +1877,14 @@ def run_sector17_task(task_id, text, output_dir):
             obs_url = obs_utils.upload_file(prompt_path, prompt_filename, mime_type='text/plain')
             
             if obs_url:
-                SECTOR_TASKS[task_id]['status'] = 'completed'
-                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
-                log_callback("Task completed successfully.")
+                log_callback("Prompt saved and uploaded. Triggering I2V...")
                 
                 # Trigger I2V
                 trigger_i2v_for_sector(prompt, image_path, log_callback=log_callback)
                 
+                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
+                SECTOR_TASKS[task_id]['status'] = 'completed'
+                log_callback("Task completed successfully.")
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
@@ -1925,12 +1926,14 @@ def run_sector19_task(task_id, video_path, output_dir):
             obs_url = obs_utils.upload_file(prompt_path, prompt_filename, mime_type='text/plain')
             
             if obs_url:
-                SECTOR_TASKS[task_id]['status'] = 'completed'
-                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
-                log_callback("Task completed successfully.")
+                log_callback("Prompt saved and uploaded. Triggering I2V...")
                 
                 # Trigger I2V
                 trigger_i2v_for_sector(prompt, image_path, log_callback=log_callback)
+                
+                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
+                SECTOR_TASKS[task_id]['status'] = 'completed'
+                log_callback("Task completed successfully.")
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
