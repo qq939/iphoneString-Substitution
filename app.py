@@ -15,6 +15,7 @@ import comfy_utils
 import obs_utils
 import ffmpeg_utils
 import extractor_utils
+from email_utils import send_email
 
 
 try:
@@ -1117,6 +1118,11 @@ def monitor_group_task(group_id):
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
                         print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
+                        
+                        # Send email notification
+                        task_type = group_data.get('workflow_type', 'Group Task')
+                        email_subject = f"{task_type} Completed"
+                        send_email(email_subject, obs_url)
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
@@ -1885,6 +1891,9 @@ def run_sector17_task(task_id, text, output_dir):
                 SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
                 SECTOR_TASKS[task_id]['status'] = 'completed'
                 log_callback("Task completed successfully.")
+                
+                # Send email notification
+                send_email("Video Analysis (Sector 19) Task Completed", obs_url)
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
