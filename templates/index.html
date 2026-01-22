@@ -410,8 +410,8 @@
     </div>
 
     <div class="page-nav-bar">
-        <div class="page-nav-zone page-nav-prev">◀ PREV</div>
-        <div class="page-nav-zone page-nav-next">NEXT ▶</div>
+        <div class="page-nav-zone page-nav-prev" onclick="goPrevPage()" style="cursor: pointer;">◀ PREV</div>
+        <div class="page-nav-zone page-nav-next" onclick="goNextPage()" style="cursor: pointer;">NEXT ▶</div>
     </div>
 
     <script>
@@ -430,17 +430,22 @@
         var touchEndX = 0;
 
         function updatePageVisibility() {
+            console.log('Updating visibility. Current Page:', currentPage);
             var pages = document.querySelectorAll('.page');
+            console.log('Found pages:', pages.length);
             pages.forEach(function (p, idx) {
                 if (idx === currentPage - 1) {
                     p.classList.add('active');
+                    console.log('Page ' + (idx+1) + ' set to active');
                 } else {
                     p.classList.remove('active');
+                    console.log('Page ' + (idx+1) + ' set to inactive');
                 }
             });
         }
 
         function goToPage(page) {
+            console.log('Going to page:', page);
             if (page < 1) page = 1;
             if (page > totalPages) page = totalPages;
             currentPage = page;
@@ -448,10 +453,12 @@
         }
 
         function goPrevPage() {
+            console.log('goPrevPage called');
             goToPage(currentPage - 1);
         }
 
         function goNextPage() {
+            console.log('goNextPage called');
             goToPage(currentPage + 1);
         }
 

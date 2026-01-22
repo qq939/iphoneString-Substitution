@@ -406,10 +406,13 @@ def analyze_video(video_path: str, resource_dir: str) -> str:
         grid_img = create_grid_image(chunk, GRID_SIZE)
         if grid_img:
             grid_images.append(grid_img)
-            # Optionally save grid images for debug
-            # grid_filename = f"{os.path.basename(video_path)}_grid_{i//chunk_size}.jpg"
-            # grid_path = os.path.join(resource_output_dir, grid_filename)
-            # grid_img.save(grid_path)
+            
+    # Limit number of grid images to avoid LLM API limits (e.g. Zhipu limit)
+    # If we have too many, sample them uniformly
+    MAX_GRID_IMAGES = 4
+    if len(grid_images) > MAX_GRID_IMAGES:
+        indices = np.linspace(0, len(grid_images) - 1, MAX_GRID_IMAGES, dtype=int)
+        grid_images = [grid_images[i] for i in indices]
             
     # 3. Construct Prompt
     context = ""

@@ -9,6 +9,7 @@ yt-dlp
 langchain
 langchain-openai
 imageio-ffmpeg
+static-ffmpeg
 numpy
 python-dotenv
 
