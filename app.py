@@ -17,13 +17,6 @@ import ffmpeg_utils
 import extractor_utils
 from email_utils import send_email
 
-
-try:
-    import static_ffmpeg
-    static_ffmpeg.add_paths()
-except ImportError:
-    print("static_ffmpeg not found, relying on system PATH")
-
 # Add local bin directory to PATH for ffmpeg/ffprobe
 local_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bin')
 if os.path.exists(local_bin):

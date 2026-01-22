@@ -7,7 +7,6 @@ import math
 import base64
 import cv2
 import yt_dlp
-import imageio_ffmpeg
 import numpy as np
 import logging
 from PIL import Image, ImageDraw, ImageFont
@@ -199,8 +198,9 @@ def download_video(url: str, output_dir: str) -> str | None:
             shutil.rmtree(output_dir)
             os.makedirs(output_dir)
             
-        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
-        print(f"Using ffmpeg from: {ffmpeg_path}")
+        # Rely on system ffmpeg
+        ffmpeg_path = "ffmpeg"
+        print(f"Using ffmpeg from system path")
 
         ydl_opts = {
             'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
