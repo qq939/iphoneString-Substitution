@@ -1353,51 +1353,37 @@ def monitor_i2v_group(group_id):
                         print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
                         
                         # Trigger automatic flow for Sectors 9, 10, 11, 12 -> 13, 14, 15, 16
-                        # Check if this group belongs to one of those sectors
-                        # We determine this by checking the segment_index of tasks
-                        
-                        target_channel = None
+                        # Iterate through ALL tasks to trigger corresponding channels
                         for task in tasks:
                             idx = task.get('segment_index')
-                            if idx == 0:
-                                target_channel = '13'
-                                break
-                            elif idx == 1:
-                                target_channel = '14'
-                                break
-                            elif idx == 2:
-                                target_channel = '15'
-                                break
-                            elif idx == 3:
-                                target_channel = '16'
-                                break
-                        
-                        if target_channel:
-                            print(f"【自动触发】检测到Sector任务完成，触发Sector{target_channel}流程")
-                            try:
-                                # Get or create persistent group ID for this channel
-                                channel_group_id = CHANNEL_TRANSITION_GROUPS.get(target_channel)
-                                
-                                # Check if group exists in store, if not, reset it
-                                if channel_group_id and channel_group_id not in TASKS_STORE:
-                                    channel_group_id = None
-                                
-                                # Add video to transition group
-                                # We use output_path which is the final concatenated video (or single video)
-                                # add_video_to_transition_group_core will resize it again, which is fine (safe).
-                                new_group_id = add_video_to_transition_group_core(
-                                    output_path, 
-                                    output_filename, 
-                                    channel_group_id
-                                )
-                                
-                                # Update persistent ID
-                                CHANNEL_TRANSITION_GROUPS[target_channel] = new_group_id
-                                
-                                print(f"【自动触发】已将视频添加到Sector{target_channel}转场组: {new_group_id}")
-                                
-                            except Exception as e:
-                                print(f"【自动触发】失败: {e}")
+                            local_res_path = task.get('result_path')
+                            
+                            if not local_res_path or not os.path.exists(local_res_path):
+                                continue
+
+                            target_channel = None
+                            if idx == 0: target_channel = '13'
+                            elif idx == 1: target_channel = '14'
+                            elif idx == 2: target_channel = '15'
+                            elif idx == 3: target_channel = '16'
+                            
+                            if target_channel:
+                                print(f"【自动触发】Task idx={idx}完成，触发Sector{target_channel}流程")
+                                try:
+                                    channel_group_id = CHANNEL_TRANSITION_GROUPS.get(target_channel)
+                                    if channel_group_id and channel_group_id not in TASKS_STORE:
+                                        channel_group_id = None
+                                    
+                                    # Use the individual task video path
+                                    new_group_id = add_video_to_transition_group_core(
+                                        local_res_path, 
+                                        os.path.basename(local_res_path), 
+                                        channel_group_id
+                                    )
+                                    CHANNEL_TRANSITION_GROUPS[target_channel] = new_group_id
+                                    print(f"【自动触发】已将视频添加到Sector{target_channel}转场组: {new_group_id}")
+                                except Exception as e:
+                                    print(f"【自动触发】Sector{target_channel}失败: {e}")
                         
                     else:
                         group_data['status'] = 'failed'
