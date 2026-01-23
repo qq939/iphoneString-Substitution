@@ -1467,6 +1467,38 @@ def monitor_i2v_group(group_id):
                         group_data['status'] = 'completed'
                         log_callback(f"【I2V】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
                         
+                        # Extract last frame and upload as character.png
+                        try:
+                            log_callback(f"【I2V】中间步骤: 提取视频最后一帧并上传为 character.png...")
+                            frame_output_path = os.path.join(UPLOAD_FOLDER, f"last_frame_{group_id}.png")
+                            
+                            # Get duration
+                            video_info = ffmpeg_utils.get_video_info(output_path)
+                            duration = video_info.get('duration', 0)
+                            
+                            if duration > 0:
+                                # Extract last frame (offset slightly from end)
+                                extract_time = max(0, duration - 0.1)
+                                ffmpeg_utils.extract_frame(output_path, frame_output_path, extract_time)
+                                
+                                if os.path.exists(frame_output_path):
+                                    # Upload to OBS
+                                    obs_utils.upload_file(frame_output_path, "character.png", mime_type="image/png")
+                                    log_callback(f"【I2V】character.png 更新成功")
+                                    
+                                    # Clean up frame
+                                    try:
+                                        os.remove(frame_output_path)
+                                    except:
+                                        pass
+                                else:
+                                    log_callback(f"【I2V】警告: 最后一帧提取失败，未找到文件")
+                            else:
+                                log_callback(f"【I2V】警告: 视频时长无效，跳过 character.png 更新")
+                                
+                        except Exception as e:
+                            log_callback(f"【I2V】character.png 更新失败: {e}")
+                        
                         # Send email notification
                         send_email("Image-to-Video (I2V) Task Completed", obs_url)
                         
