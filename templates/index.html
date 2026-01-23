@@ -879,29 +879,7 @@
                     statusDiv.innerText = 'SUBMITTED. PROCESSING...';
                     
                     // Poll for status
-                    const promptId = result.prompt_id;
-                    const pollInterval = setInterval(async () => {
-                        try {
-                            const statusRes = await fetch(`/check_audio_status/${promptId}`);
-                            const statusData = await statusRes.json();
-                            
-                            if (statusData.status === 'completed') {
-                                clearInterval(pollInterval);
-                                statusDiv.innerText = 'AUDIO GENERATED SUCCESSFULLY.';
-                                btn.disabled = false;
-                                // Update preview
-                                updateLatestAudio();
-                            } else if (statusData.status === 'failed') {
-                                clearInterval(pollInterval);
-                                statusDiv.innerText = 'FAILED: ' + (statusData.error || 'Unknown');
-                                btn.disabled = false;
-                            } else {
-                                statusDiv.innerText = `PROCESSING... [${statusData.status}]`;
-                            }
-                        } catch (e) {
-                            console.error(e);
-                        }
-                    }, 2000);
+                    pollSector7(result.prompt_id);
                     
                 } else {
                     statusDiv.innerText = 'ERROR: ' + (result.error || 'Unknown');
@@ -959,28 +937,7 @@
             .then(data => {
                 if (data.status === 'processing') {
                     statusDiv.innerText = 'PROCESSING...';
-                    const groupId = data.group_id;
-                    const poll = setInterval(() => {
-                        fetch(`/check_group_status/${groupId}`)
-                            .then(r => r.json())
-                            .then(s => {
-                                if (s.status === 'processing') {
-                                    statusDiv.innerText = `PROCESSING... [${s.progress}]`;
-                                } else {
-                                    clearInterval(poll);
-                                    if (s.status === 'completed') {
-                                        statusDiv.innerText = 'COMPLETED.';
-                                        updateLatestVideo(true);
-                                    } else {
-                                        statusDiv.innerText = 'FAILED: ' + (s.error || 'Unknown');
-                                    }
-                                    btn.disabled = false;
-                                }
-                            })
-                            .catch(e => {
-                                // Ignore transient errors
-                            });
-                    }, 2000);
+                    pollI2V(data.group_id, index);
                 } else {
                     statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown');
                     btn.disabled = false;
@@ -1036,34 +993,7 @@
                 const data = await res.json();
                 
                 if (data.status === 'processing') {
-                     const taskId = data.task_id;
-                     
-                     const poll = setInterval(async () => {
-                         try {
-                             const checkRes = await fetch(`/check_sector_task/${taskId}`);
-                             const taskData = await checkRes.json();
-                             
-                             // Update logs
-                             if (taskData.logs && taskData.logs.length > 0) {
-                                 status.innerHTML = formatLog(taskData.logs.join('\n'));
-                                 // Auto scroll to bottom
-                                 status.scrollTop = status.scrollHeight;
-                             }
-                             
-                             if (taskData.status === 'completed') {
-                                 clearInterval(poll);
-                                 status.innerHTML += '<br><br>COMPLETED.';
-                                 btn.disabled = false;
-                             } else if (taskData.status === 'failed') {
-                                 clearInterval(poll);
-                                 status.innerHTML += '<br><br>FAILED: ' + (taskData.error || 'Unknown');
-                                 btn.disabled = false;
-                             }
-                         } catch (e) {
-                             console.error(e);
-                         }
-                     }, 1000);
-                     
+                     pollSector17(data.task_id);
                 } else {
                     status.innerText = 'ERROR: ' + (data.error || 'Unknown');
                     btn.disabled = false;
@@ -1096,32 +1026,7 @@
                 const data = await res.json();
                 
                 if (data.status === 'processing') {
-                     const taskId = data.task_id;
-                     
-                     const poll = setInterval(async () => {
-                         try {
-                             const checkRes = await fetch(`/check_sector_task/${taskId}`);
-                             const taskData = await checkRes.json();
-                             
-                             if (taskData.logs && taskData.logs.length > 0) {
-                                 status.innerHTML = formatLog(taskData.logs.join('\n'));
-                                 status.scrollTop = status.scrollHeight;
-                             }
-                             
-                             if (taskData.status === 'completed') {
-                                 clearInterval(poll);
-                                 status.innerHTML += '<br><br>COMPLETED.<br><br>' + formatLog(taskData.result.content || '');
-                                 btn.disabled = false;
-                             } else if (taskData.status === 'failed') {
-                                 clearInterval(poll);
-                                 status.innerHTML += '<br><br>FAILED: ' + (taskData.error || 'Unknown');
-                                 btn.disabled = false;
-                             }
-                         } catch (e) {
-                             console.error(e);
-                         }
-                     }, 1000);
-                     
+                     pollSector19(data.task_id);
                 } else {
                     status.innerText = 'ERROR: ' + (data.error || 'Unknown');
                     btn.disabled = false;
@@ -1196,6 +1101,318 @@
                 status.innerText = 'COPY FAILED: ' + err.message;
             }
         }
+
+        // --- Polling Functions (Extracted & Shared) ---
+
+        const pollingRegistry = {
+            sector7: { id: null, interval: null },
+            sector9: { id: null, interval: null },
+            sector10: { id: null, interval: null },
+            sector11: { id: null, interval: null },
+            sector12: { id: null, interval: null },
+            sector17: { id: null, interval: null },
+            sector19: { id: null, interval: null }
+        };
+
+        function startPolling(key, taskId, intervalFn) {
+            if (pollingRegistry[key].id === taskId && pollingRegistry[key].interval) {
+                return; // Already polling this task
+            }
+            
+            // Clear previous if any
+            if (pollingRegistry[key].interval) {
+                clearInterval(pollingRegistry[key].interval);
+            }
+            
+            pollingRegistry[key].id = taskId;
+            
+            const interval = setInterval(async () => {
+                const shouldStop = await intervalFn();
+                if (shouldStop) {
+                    clearInterval(interval);
+                    pollingRegistry[key].interval = null;
+                }
+            }, 2000);
+            
+            pollingRegistry[key].interval = interval;
+        }
+
+        function pollSector7(promptId) {
+            console.log("pollSector7 called with ID:", promptId);
+            const statusDiv = document.getElementById('audioStatus');
+            const btn = document.getElementById('audioUploadBtn');
+            
+            if (!statusDiv) return;
+
+            if (pollingRegistry.sector7.id !== promptId) {
+                if (!statusDiv.innerText.includes('PROCESSING') && !statusDiv.innerText.includes('SUBMITTING')) {
+                     statusDiv.innerText = 'RESTORING SESSION...';
+                }
+                btn.disabled = true;
+            }
+
+            startPolling('sector7', promptId, async () => {
+                try {
+                    const statusRes = await fetch(`/check_audio_status/${promptId}`);
+                    const statusData = await statusRes.json();
+                    
+                    if (statusData.status === 'completed') {
+                        statusDiv.innerText = 'AUDIO GENERATED SUCCESSFULLY.';
+                        btn.disabled = false;
+                        updateLatestAudio();
+                        return true;
+                    } else if (statusData.status === 'failed') {
+                        statusDiv.innerText = 'FAILED: ' + (statusData.error || 'Unknown');
+                        btn.disabled = false;
+                        return true;
+                    } else {
+                        statusDiv.innerText = `PROCESSING... [${statusData.status}]`;
+                        return false;
+                    }
+                } catch (e) {
+                    console.error(e);
+                    return false;
+                }
+            });
+        }
+
+        function pollI2V(groupId, index) {
+            const key = `sector${index}`;
+            const statusDiv = document.getElementById(`i2vStatus${index}`);
+            const textInput = document.getElementById(`i2vText${index}`);
+            if (!textInput) return;
+            const btn = textInput.parentElement.querySelector('button');
+
+            if (pollingRegistry[key].id !== groupId) {
+                if (!statusDiv.innerText.includes('PROCESSING') && !statusDiv.innerText.includes('SUBMITTING')) {
+                    statusDiv.innerText = 'RESTORING SESSION...';
+                }
+                btn.disabled = true;
+            }
+
+            startPolling(key, groupId, async () => {
+                try {
+                    const r = await fetch(`/check_group_status/${groupId}`);
+                    const s = await r.json();
+                    
+                    if (s.status === 'processing') {
+                        statusDiv.innerText = `PROCESSING... [${s.progress || ''}]`;
+                        return false;
+                    } else {
+                        if (s.status === 'completed') {
+                            statusDiv.innerText = 'COMPLETED.';
+                            updateLatestVideo(true);
+                        } else {
+                            statusDiv.innerText = 'FAILED: ' + (s.error || 'Unknown');
+                        }
+                        btn.disabled = false;
+                        return true;
+                    }
+                } catch (e) {
+                    return false;
+                }
+            });
+        }
+
+        function pollSector17(taskId) {
+            const status = document.getElementById('sector17Status');
+            const btn = document.querySelector('.item-17 .action-btn');
+            
+            if (pollingRegistry.sector17.id !== taskId) {
+                if (!status.innerText.includes('SUBMITTING')) {
+                     // status.innerText = 'RESTORING SESSION...'; 
+                }
+                btn.disabled = true;
+            }
+            
+            startPolling('sector17', taskId, async () => {
+                 try {
+                     const checkRes = await fetch(`/check_sector_task/${taskId}`);
+                     const taskData = await checkRes.json();
+                     
+                     if (taskData.logs && taskData.logs.length > 0) {
+                         status.innerHTML = formatLog(taskData.logs.join('\n'));
+                         status.scrollTop = status.scrollHeight;
+                     }
+                     
+                     if (taskData.status === 'completed') {
+                         status.innerHTML += '<br><br>COMPLETED.';
+                         btn.disabled = false;
+                         return true;
+                     } else if (taskData.status === 'failed') {
+                         status.innerHTML += '<br><br>FAILED: ' + (taskData.error || 'Unknown');
+                         btn.disabled = false;
+                         return true;
+                     }
+                     return false;
+                 } catch (e) {
+                     console.error(e);
+                     return false;
+                 }
+             });
+        }
+
+        function pollSector19(taskId) {
+            const status = document.getElementById('sector19Status');
+            const form = document.getElementById('sector19Form');
+            const btn = form.querySelector('button[type="submit"]');
+
+            if (pollingRegistry.sector19.id !== taskId) {
+                if (!status.innerText.includes('UPLOADING')) {
+                    // status.innerText = 'RESTORING SESSION...';
+                }
+                btn.disabled = true;
+            }
+
+            startPolling('sector19', taskId, async () => {
+                 try {
+                     const checkRes = await fetch(`/check_sector_task/${taskId}`);
+                     const taskData = await checkRes.json();
+                     
+                     if (taskData.logs && taskData.logs.length > 0) {
+                         status.innerHTML = formatLog(taskData.logs.join('\n'));
+                         status.scrollTop = status.scrollHeight;
+                     }
+                     
+                     if (taskData.status === 'completed') {
+                         status.innerHTML += '<br><br>COMPLETED.<br><br>' + formatLog(taskData.result.content || '');
+                         btn.disabled = false;
+                         return true;
+                     } else if (taskData.status === 'failed') {
+                         status.innerHTML += '<br><br>FAILED: ' + (taskData.error || 'Unknown');
+                         btn.disabled = false;
+                         return true;
+                     }
+                     return false;
+                 } catch (e) {
+                     console.error(e);
+                     return false;
+                 }
+             });
+        }
+
+        // --- Synchronization Logic ---
+
+        let syncDebounceTimer;
+        function debounceSync(sector, updates) {
+            clearTimeout(syncDebounceTimer);
+            syncDebounceTimer = setTimeout(() => {
+                updateGlobalState(sector, updates);
+            }, 500);
+        }
+
+        async function updateGlobalState(sector, updates) {
+            try {
+                await fetch('/api/sync_state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sector, updates })
+                });
+            } catch (e) {
+                console.error('Sync failed:', e);
+            }
+        }
+
+        async function restoreState() {
+            try {
+                const res = await fetch('/api/sync_state');
+                const state = await res.json();
+                
+                // Sector 7 (Audio)
+                if (state.sector7) {
+                    const input = document.querySelector('#audioUploadForm input[name="text"]');
+                    if (input && state.sector7.text && input !== document.activeElement) {
+                         if (input.value !== state.sector7.text) input.value = state.sector7.text;
+                    }
+                    
+                    if (state.sector7.emotions) {
+                        state.sector7.emotions.forEach(emo => {
+                            const cb = document.querySelector(`input[name="emotions"][value="${emo}"]`);
+                            if (cb && !cb.matches(':focus')) cb.checked = true;
+                        });
+                    }
+
+                    if (state.sector7.latest_task_id) {
+                        pollSector7(state.sector7.latest_task_id);
+                    }
+                }
+
+                // Sector 9-12 (I2V)
+                [9, 10, 11, 12].forEach(i => {
+                    const sKey = `sector${i}`;
+                    if (state[sKey]) {
+                        const input = document.getElementById(`i2vText${i}`);
+                        if (input && state[sKey].text && input !== document.activeElement) {
+                            if (input.value !== state[sKey].text) input.value = state[sKey].text;
+                        }
+                        
+                        if (state[sKey].latest_task_id) {
+                            pollI2V(state[sKey].latest_task_id, i);
+                        }
+                    }
+                });
+
+                // Sector 17
+                if (state.sector17) {
+                    const input = document.getElementById('sector17Input');
+                    if (input && state.sector17.text && input !== document.activeElement) {
+                        if (input.value !== state.sector17.text) input.value = state.sector17.text;
+                    }
+                    
+                    if (state.sector17.latest_task_id) {
+                        pollSector17(state.sector17.latest_task_id);
+                    }
+                }
+
+                // Sector 19 (Logs only, file cannot be synced)
+                if (state.sector19 && state.sector19.latest_task_id) {
+                    pollSector19(state.sector19.latest_task_id);
+                }
+
+            } catch (e) {
+                console.error('Restore state failed:', e);
+            }
+        }
+
+        // Attach Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            restoreState();
+            setInterval(restoreState, 2000); // Poll for sync updates every 2s
+
+            // Sector 7 Input
+            const audioInput = document.querySelector('#audioUploadForm input[name="text"]');
+            if (audioInput) {
+                audioInput.addEventListener('input', (e) => {
+                    const emotions = Array.from(document.querySelectorAll('input[name="emotions"]:checked')).map(cb => cb.value);
+                    debounceSync('sector7', { text: e.target.value, emotions });
+                });
+            }
+            document.querySelectorAll('input[name="emotions"]').forEach(cb => {
+                cb.addEventListener('change', () => {
+                     const text = document.querySelector('#audioUploadForm input[name="text"]').value;
+                     const emotions = Array.from(document.querySelectorAll('input[name="emotions"]:checked')).map(cb => cb.value);
+                     debounceSync('sector7', { text, emotions });
+                });
+            });
+
+            // Sector 9-12 Inputs
+            [9, 10, 11, 12].forEach(i => {
+                const input = document.getElementById(`i2vText${i}`);
+                if (input) {
+                    input.addEventListener('input', (e) => {
+                        debounceSync(`sector${i}`, { text: e.target.value });
+                    });
+                }
+            });
+
+            // Sector 17 Input
+            const s17Input = document.getElementById('sector17Input');
+            if (s17Input) {
+                s17Input.addEventListener('input', (e) => {
+                    debounceSync('sector17', { text: e.target.value });
+                });
+            }
+        });
     </script>
 </body>
 </html>

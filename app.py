@@ -88,6 +88,44 @@ WAIT_OVERTIME_SECONDS = 6 * 60 * 60  # Used in: monitor_group_task timeout contr
 BACKEND_TASK_TIMEOUT_SECONDS = 6 * 60 * 60  # Used in: monitor_audio_task, monitor_i2v_group timeout control
 BACKEND_POLL_INTERVAL_SECONDS = 15  # Used in: monitor_group_task, monitor_audio_task, monitor_i2v_group polling interval
 
+# Global UI State for Multi-Client Synchronization
+GLOBAL_STATE = {
+    'sector7': {'text': '', 'emotions': [], 'latest_task_id': None},
+    'sector9': {'text': '', 'latest_task_id': None},
+    'sector10': {'text': '', 'latest_task_id': None},
+    'sector11': {'text': '', 'latest_task_id': None},
+    'sector12': {'text': '', 'latest_task_id': None},
+    'sector17': {'text': '', 'latest_task_id': None},
+    'sector19': {'latest_task_id': None}, # File input cannot be synced, but logs can
+    # Add others as needed
+}
+GLOBAL_STATE_LOCK = threading.Lock()
+
+@app.route('/api/sync_state', methods=['GET', 'POST'])
+def sync_state():
+    if request.method == 'POST':
+        try:
+            data = request.get_json(force=True)
+            sector = data.get('sector')
+            updates = data.get('updates') # Dict of key-values to update
+            
+            if sector and updates and sector in GLOBAL_STATE:
+                with GLOBAL_STATE_LOCK:
+                    GLOBAL_STATE[sector].update(updates)
+                return jsonify({'status': 'success', 'state': GLOBAL_STATE[sector]})
+            return jsonify({'error': 'Invalid sector or data'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        return jsonify(GLOBAL_STATE)
+
+def update_sector_task_id(sector, task_id):
+    """Helper to update the latest task ID for a sector"""
+    if sector in GLOBAL_STATE:
+        with GLOBAL_STATE_LOCK:
+            GLOBAL_STATE[sector]['latest_task_id'] = task_id
+
+
 def modify_digital_human_workflow(workflow, image_filename, audio_filename, audio_duration=None):
     """
     Modifies the digital human video workflow JSON based on inputs.
@@ -577,6 +615,13 @@ def upload_audio():
                     os.remove(wav_path)
                 except OSError:
                     pass
+
+            # Update Global State for Sector 7
+            if 'sector7' in GLOBAL_STATE:
+                with GLOBAL_STATE_LOCK:
+                    GLOBAL_STATE['sector7']['text'] = text
+                    GLOBAL_STATE['sector7']['emotions'] = emotions
+                    GLOBAL_STATE['sector7']['latest_task_id'] = prompt_id
                 
             return jsonify({"status": "success", "prompt_id": prompt_id})
         else:
@@ -1801,6 +1846,21 @@ def generate_i2v_group():
     thread.daemon = True
     thread.start()
     
+    # Update Global State for Sectors 9-12
+    with GLOBAL_STATE_LOCK:
+        if 'sector9' in GLOBAL_STATE:
+            GLOBAL_STATE['sector9']['text'] = texts[0] if len(texts) > 0 else ''
+            GLOBAL_STATE['sector9']['latest_task_id'] = group_id
+        if 'sector10' in GLOBAL_STATE:
+            GLOBAL_STATE['sector10']['text'] = texts[1] if len(texts) > 1 else ''
+            GLOBAL_STATE['sector10']['latest_task_id'] = group_id
+        if 'sector11' in GLOBAL_STATE:
+            GLOBAL_STATE['sector11']['text'] = texts[2] if len(texts) > 2 else ''
+            GLOBAL_STATE['sector11']['latest_task_id'] = group_id
+        if 'sector12' in GLOBAL_STATE:
+            GLOBAL_STATE['sector12']['text'] = texts[3] if len(texts) > 3 else ''
+            GLOBAL_STATE['sector12']['latest_task_id'] = group_id
+
     return jsonify({'status': 'processing', 'group_id': group_id})
 
 def get_latest_file_from_obs(suffix):
@@ -2204,6 +2264,12 @@ def sector17_submit():
     
     threading.Thread(target=run_sector17_task, args=(task_id, text, output_dir)).start()
     
+    # Update Global State for Sector 17
+    if 'sector17' in GLOBAL_STATE:
+        with GLOBAL_STATE_LOCK:
+            GLOBAL_STATE['sector17']['text'] = text
+            GLOBAL_STATE['sector17']['latest_task_id'] = task_id
+
     return jsonify({'status': 'processing', 'task_id': task_id})
 
 @app.route('/sector19_submit', methods=['POST'])
@@ -2251,6 +2317,11 @@ def sector19_submit():
     
     threading.Thread(target=run_sector19_task, args=(task_id, video_path, output_dir)).start()
     
+    # Update Global State for Sector 19
+    if 'sector19' in GLOBAL_STATE:
+        with GLOBAL_STATE_LOCK:
+            GLOBAL_STATE['sector19']['latest_task_id'] = task_id
+
     return jsonify({'status': 'processing', 'task_id': task_id})
 
 @app.route('/upload_chunk', methods=['POST'])
@@ -2318,6 +2389,11 @@ def video_analyzing():
     
     threading.Thread(target=run_sector19_task, args=(task_id, video_path, output_dir)).start()
     
+    # Update Global State for Sector 19
+    if 'sector19' in GLOBAL_STATE:
+        with GLOBAL_STATE_LOCK:
+            GLOBAL_STATE['sector19']['latest_task_id'] = task_id
+
     return jsonify({'status': 'processing', 'task_id': task_id})
 
 @app.route('/check_sector_task/<task_id>', methods=['GET'])
