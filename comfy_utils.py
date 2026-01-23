@@ -63,7 +63,7 @@ class ComfyUIClient:
                 
                 url = f"{server.rstrip('/')}/object_info"
                 headers = {'User-Agent': 'Mozilla/5.0'}
-                response = requests.get(url, timeout=30, headers=headers)
+                response = requests.get(url, timeout=3, headers=headers)
                 if response.status_code == 200:
                     return server
             except:
@@ -127,11 +127,12 @@ class ComfyUIClient:
             logger.error(f"Get object info failed: {e}")
             return None
 
-    def queue_prompt(self, prompt):
+    def queue_prompt(self, prompt, log_callback=None):
         """
         Sends the workflow to the server.
         """
         try:
+            if log_callback: log_callback(f"Sending prompt to {self.base_url}...")
             p = {"prompt": prompt, "client_id": self.client_id}
             data = json.dumps(p).encode('utf-8')
             
@@ -140,6 +141,7 @@ class ComfyUIClient:
             with urllib.request.urlopen(req, timeout=60) as response:
                 response_data = json.loads(response.read())
                 if 'prompt_id' in response_data:
+                    if log_callback: log_callback(f"Prompt queued successfully. ID: {response_data['prompt_id']}")
                     return response_data['prompt_id'], self.server_address
         except Exception as e:
             error_msg = str(e)
@@ -148,6 +150,7 @@ class ComfyUIClient:
                 try:
                     error_body = e.read().decode('utf-8')
                     logger.warning(f"Failed to queue prompt. Response: {error_body}")
+                    if log_callback: log_callback(f"Failed to queue prompt. Response: {error_body}")
                     
                     # Try to parse error to give helpful hints
                     try:
@@ -163,12 +166,14 @@ class ComfyUIClient:
                                         # structure: {'UNETLoader': {'input': {'required': {'unet_name': [['model1', 'model2'], ...]}}}}
                                         models = info.get('UNETLoader', {}).get('input', {}).get('required', {}).get('unet_name', [[]])[0]
                                         logger.info(f"Available UNET models on server ({len(models)}): {models}")
+                                        if log_callback: log_callback(f"Available UNET models: {models}")
                     except:
                         pass
                         
                 except:
                     pass
             logger.warning(f"Failed to queue prompt: {e}")
+            if log_callback: log_callback(f"Failed to queue prompt: {e}")
             raise # Propagate exception to caller
             
         return None, None
@@ -189,11 +194,12 @@ class ComfyUIClient:
             pass
         return None
 
-    def upload_file(self, file_path, subfolder="", overwrite=True):
+    def upload_file(self, file_path, subfolder="", overwrite=True, log_callback=None):
         """
         Uploads a file to ComfyUI.
         """
         try:
+            if log_callback: log_callback(f"Uploading file to ComfyUI ({self.base_url}): {file_path}")
             url = f"{self.base_url}/upload/image"
             with open(file_path, 'rb') as f:
                 files = {'image': f}
@@ -201,12 +207,16 @@ class ComfyUIClient:
                 response = requests.post(url, files=files, data=data, timeout=60)
                 
             if response.status_code == 200:
-                return response.json()
+                res = response.json()
+                if log_callback: log_callback(f"Upload successful: {res.get('name')}")
+                return res
             else:
                 logger.error(f"Upload failed: {response.status_code} - {response.text}")
+                if log_callback: log_callback(f"Upload failed: {response.status_code}")
                 return None
         except Exception as e:
             logger.error(f"Upload exception: {e}")
+            if log_callback: log_callback(f"Upload exception: {e}")
             return None
     
     def download_output_file(self, filename, subfolder="", file_type="output", output_dir=".", server_address=None):
@@ -308,10 +318,11 @@ else:
 # Helper functions for app.py
 # These act as wrappers around the client instance
 
-def submit_job_with_urls(character_url, video_url):
+def submit_job_with_urls(character_url, video_url, log_callback=None):
     temp_dir = tempfile.mkdtemp()
     try:
         # Download character
+        if log_callback: log_callback(f"Downloading character from {character_url}")
         char_filename = os.path.basename(character_url).split('?')[0] or "character.png"
         char_path = os.path.join(temp_dir, char_filename)
         with requests.get(character_url, stream=True) as r:
@@ -320,6 +331,7 @@ def submit_job_with_urls(character_url, video_url):
                 for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
                     
         # Download video
+        if log_callback: log_callback(f"Downloading video from {video_url}")
         video_filename = os.path.basename(video_url).split('?')[0] or "video.mp4"
         video_path = os.path.join(temp_dir, video_filename)
         with requests.get(video_url, stream=True) as r:
@@ -327,24 +339,26 @@ def submit_job_with_urls(character_url, video_url):
             with open(video_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
         
-        return submit_job(char_path, video_path)
+        return submit_job(char_path, video_path, log_callback=log_callback)
     except Exception as e:
         logger.error(f"Submit job with URLs failed: {e}")
+        if log_callback: log_callback(f"Submit job with URLs failed: {e}")
         return None, None, str(e)
     finally:
         shutil.rmtree(temp_dir)
 
-def submit_job(character_path, video_path):
+def submit_job(character_path, video_path, log_callback=None):
     try:
-        char_res = client.upload_file(character_path)
-        video_res = client.upload_file(video_path)
+        char_res = client.upload_file(character_path, log_callback=log_callback)
+        video_res = client.upload_file(video_path, log_callback=log_callback)
         
         if not char_res or not video_res:
             return None, None, "Failed to upload files"
             
-        return queue_workflow_template(char_res.get('name'), video_res.get('name'))
+        return queue_workflow_template(char_res.get('name'), video_res.get('name'), log_callback=log_callback)
     except Exception as e:
         logger.error(f"Submit job error: {e}")
+        if log_callback: log_callback(f"Submit job error: {e}")
         return None, None, str(e)
 
 def cancel_job(prompt_id):
@@ -394,7 +408,7 @@ def adjust_segment_length(workflow, segment_duration):
         logger.warning(f"Failed to adjust segment length: {e}")
     return workflow
 
-def queue_workflow_template(char_filename, video_filename, prompt_text=None, workflow_type='real', segment_duration=None):
+def queue_workflow_template(char_filename, video_filename, prompt_text=None, workflow_type='real', segment_duration=None, log_callback=None):
     try:
         if workflow_type == 'anime':
             workflow_path = os.path.join(
@@ -410,6 +424,7 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
             )
             
         if not os.path.exists(workflow_path):
+            if log_callback: log_callback(f"Workflow file not found: {workflow_path}")
             return None, None, f"Workflow file not found: {workflow_path}"
             
         with open(workflow_path, 'r', encoding='utf-8') as f:
@@ -430,7 +445,13 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
                 if node_id in workflow and "inputs" in workflow[node_id] and "seed" in workflow[node_id]["inputs"]:
                     workflow[node_id]["inputs"]["seed"] = seed
             
-        prompt_id, server_address = client.queue_prompt(workflow)
+        if log_callback: 
+            log_callback(f"Submitting workflow to ComfyUI (Type: {workflow_type})...")
+            log_callback(f"Inputs - Character: {char_filename}, Video: {video_filename}")
+            if prompt_text:
+                log_callback(f"Prompt: {prompt_text[:50]}..." if len(prompt_text) > 50 else f"Prompt: {prompt_text}")
+        prompt_id, server_address = client.queue_prompt(workflow, log_callback=log_callback)
+        if log_callback: log_callback(f"Workflow submitted. Prompt ID: {prompt_id}, Server: {server_address}")
         return (prompt_id, server_address, None) if prompt_id else (None, None, "Failed to queue prompt")
     except Exception as e:
         error_msg = str(e)
@@ -441,6 +462,7 @@ def queue_workflow_template(char_filename, video_filename, prompt_text=None, wor
             except:
                 pass
         logger.error(f"Queue workflow template error: {error_msg}")
+        if log_callback: log_callback(f"Queue workflow template error: {error_msg}")
         return None, None, error_msg
 
 def check_status(prompt_id, server_address=None):

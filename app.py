@@ -27,7 +27,9 @@ try:
 except ImportError:
     AudioSegment = None
 
+print("App starting...")
 app = Flask(__name__)
+print("Flask app created")
 
 # Global config and shared state (used across multiple routes and helpers)
 SUBSTITUTION_FILE = 'langchain/substitution.txt'  # Used in: index route text substitution logic
@@ -1007,7 +1009,14 @@ def monitor_group_task(group_id):
     """
     Background thread to monitor task status.
     """
-    print(f"Starting monitor for group {group_id}")
+    def log_callback(msg):
+        if group_id in TASKS_STORE:
+            processed_msg = process_log_message(msg)
+            TASKS_STORE[group_id].setdefault('logs', []).append(f"[{datetime.now().strftime('%H:%M:%S')}] {processed_msg}")
+            # Also print for server logs
+            print(f"[Group {group_id}] {msg}")
+
+    log_callback(f"Starting monitor for group {group_id}")
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
         print(f"Group {group_id} not found")
@@ -1019,7 +1028,7 @@ def monitor_group_task(group_id):
         if created_at is not None and now - created_at > WAIT_OVERTIME_SECONDS:
             group_data['status'] = 'failed'
             group_data['error'] = 'Timeout: group exceeded 6 hours'
-            print(f"Group {group_id} timed out after 6 hours")
+            log_callback(f"Group {group_id} timed out after 6 hours")
             break
 
         all_done = True
@@ -1032,7 +1041,7 @@ def monitor_group_task(group_id):
             # Check status from ComfyUI
             try:
                 status, result = comfy_utils.check_status(task['task_id'], task.get('server'))
-                print(f"DEBUG: Task {task['task_id']} status={status}")
+                # print(f"DEBUG: Task {task['task_id']} status={status}")
                 
                 if status == 'SUCCEEDED':
                     # Download result
@@ -1042,36 +1051,36 @@ def monitor_group_task(group_id):
                             if local_path:
                                 task['result_path'] = local_path
                                 task['status'] = 'completed'
-                                print(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
+                                log_callback(f"【转场】步骤4/6: 转场视频下载与定位完成，task_id={task['task_id']}")
                             else:
                                 task['status'] = 'failed'
                                 task['error'] = 'Download failed (None returned)'
-                                print(f"DEBUG: Download returned None for {task['task_id']}")
+                                log_callback(f"DEBUG: Download returned None for {task['task_id']}")
                         except Exception as e:
                             task['status'] = 'failed'
                             task['error'] = f'Download exception: {e}'
-                            print(f"DEBUG: Download exception for {task['task_id']}: {e}")
+                            log_callback(f"DEBUG: Download exception for {task['task_id']}: {e}")
                     else:
                         task['status'] = 'failed'
                         task['error'] = 'Invalid result format'
-                        print(f"DEBUG: Invalid result format for {task['task_id']}")
+                        log_callback(f"DEBUG: Invalid result format for {task['task_id']}")
                         
                 elif status == 'FAILED':
                     task['status'] = 'failed'
                     task['error'] = str(result)
-                    print(f"【转场】任务失败 task_id={task['task_id']}, error={task['error']}")
+                    log_callback(f"【转场】任务失败 task_id={task['task_id']}, error={task['error']}")
                 else:
                     # PENDING or RUNNING
                     all_done = False
             except Exception as e:
-                print(f"Error checking task {task['task_id']}: {e}")
+                log_callback(f"Error checking task {task['task_id']}: {e}")
                 # Don't mark as failed immediately, maybe network glitch?
                 # But for now let's not block forever
                 all_done = False
             
         if all_done:
-            print(f"【转场】检测到组{group_id}所有ComfyUI子任务结束，开始拼接+上传OBS")
-            print(f"Group {group_id} all tasks done. Concatenating...")
+            log_callback(f"【转场】检测到组{group_id}所有ComfyUI子任务结束，开始拼接+上传OBS")
+            log_callback(f"Group {group_id} all tasks done. Concatenating...")
             # Concatenate videos
             try:
                 # Sort by segment index
@@ -1096,13 +1105,13 @@ def monitor_group_task(group_id):
                             # Merge audio with loop enabled if needed
                             # Our merge_audio_video with loop_audio=True will loop it
                             ffmpeg_utils.merge_audio_video(temp_concat_path, audio_path, output_path, loop_audio=True)
-                            print(f"Merged audio from {audio_path}")
+                            log_callback(f"Merged audio from {audio_path}")
                             
                             # Remove temp concat
                             if os.path.exists(temp_concat_path):
                                 os.remove(temp_concat_path)
                         except Exception as e:
-                            print(f"Failed to merge audio: {e}")
+                            log_callback(f"Failed to merge audio: {e}")
                             # If merge fails, just use the silent video? 
                             # Or maybe move temp to output
                             if os.path.exists(temp_concat_path):
@@ -1113,13 +1122,13 @@ def monitor_group_task(group_id):
                             shutil.move(temp_concat_path, output_path)
                     
                     # Upload to OBS
-                    print(f"Uploading {output_path} to OBS...")
+                    log_callback(f"Uploading {output_path} to OBS...")
                     obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
                     
                     if obs_url:
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
-                        print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
+                        log_callback(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
                         
                         # Send email notification
                         task_type = group_data.get('workflow_type', 'Group Task')
@@ -1133,11 +1142,11 @@ def monitor_group_task(group_id):
                     group_data['error'] = 'No clips to concatenate'
                     
             except Exception as e:
-                print(f"Concatenation error: {e}")
+                log_callback(f"Concatenation error: {e}")
                 group_data['status'] = 'failed'
                 group_data['error'] = str(e)
             
-            print(f"Group {group_id} finished with status {group_data['status']}")
+            log_callback(f"Group {group_id} finished with status {group_data['status']}")
             break
             
         time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
@@ -1311,14 +1320,24 @@ def _add_transition_video_to_group(file_storage, group_id=None):
 
 
 def monitor_i2v_group(group_id):
+    def log_callback(msg):
+        if group_id in TASKS_STORE:
+            processed_msg = process_log_message(msg)
+            TASKS_STORE[group_id].setdefault('logs', []).append(f"[{datetime.now().strftime('%H:%M:%S')}] {processed_msg}")
+            print(f"[I2V Group {group_id}] {msg}")
+
     group_data = TASKS_STORE.get(group_id)
     if not group_data:
         return
+
+    log_callback(f"Starting I2V monitor for group {group_id}")
+
     while True:
         now = time.time()
         created_at = group_data.get('created_at')
         if created_at is not None and now - created_at > BACKEND_TASK_TIMEOUT_SECONDS:
             group_data['status'] = 'failed'
+            log_callback(f"Timeout: group exceeded {BACKEND_TASK_TIMEOUT_SECONDS} seconds")
             break
         tasks = group_data.get('tasks', [])
         all_done = True
@@ -1334,15 +1353,21 @@ def monitor_i2v_group(group_id):
                         if local_path:
                             task['result_path'] = local_path
                             task['status'] = 'completed'
+                            log_callback(f"Task {task['task_id']} completed. Path: {local_path}")
                         else:
                             task['status'] = 'failed'
+                            log_callback(f"Task {task['task_id']} download failed.")
                     else:
                         task['status'] = 'failed'
+                        log_callback(f"Task {task['task_id']} result invalid format.")
                 elif status == 'FAILED':
                     task['status'] = 'failed'
-            except Exception:
+                    log_callback(f"Task {task['task_id']} failed in ComfyUI.")
+            except Exception as e:
+                log_callback(f"Error checking task {task['task_id']}: {e}")
                 pass
         if all_done:
+            log_callback("All tasks done. Concatenating...")
             video_paths = []
             for t in sorted(tasks, key=lambda x: x['segment_index']):
                 if t.get('result_path') and os.path.exists(t['result_path']):
@@ -1352,14 +1377,17 @@ def monitor_i2v_group(group_id):
                 output_path = os.path.join(UPLOAD_FOLDER, output_filename)
                 temp_concat_path = os.path.join(UPLOAD_FOLDER, f"temp_i2v_{group_id}.mp4")
                 try:
+                    log_callback(f"Concatenating {len(video_paths)} videos...")
                     ffmpeg_utils.concatenate_videos(video_paths, temp_concat_path)
                     if os.path.exists(temp_concat_path):
                         shutil.move(temp_concat_path, output_path)
+                    
+                    log_callback(f"Uploading result to OBS: {output_filename}")
                     obs_url = obs_utils.upload_file(output_path, output_filename, mime_type='video/mp4')
                     if obs_url:
                         group_data['final_url'] = obs_url
                         group_data['status'] = 'completed'
-                        print(f"【转场】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
+                        log_callback(f"【I2V】步骤6/6: 视频合并、重命名与上传完成，生成并上传all.mp4: {output_filename}")
                         
                         # Send email notification
                         send_email("Image-to-Video (I2V) Task Completed", obs_url)
@@ -1380,7 +1408,7 @@ def monitor_i2v_group(group_id):
                             elif idx == 3: target_channel = '16'
                             
                             if target_channel:
-                                print(f"【自动触发】Task idx={idx}完成，触发Sector{target_channel}流程")
+                                log_callback(f"【自动触发】Task idx={idx}完成，触发Sector{target_channel}流程")
                                 try:
                                     channel_group_id = CHANNEL_TRANSITION_GROUPS.get(target_channel)
                                     if channel_group_id and channel_group_id not in TASKS_STORE:
@@ -1393,21 +1421,169 @@ def monitor_i2v_group(group_id):
                                         channel_group_id
                                     )
                                     CHANNEL_TRANSITION_GROUPS[target_channel] = new_group_id
-                                    print(f"【自动触发】已将视频添加到Sector{target_channel}转场组: {new_group_id}")
+                                    log_callback(f"【自动触发】已将视频添加到Sector{target_channel}转场组: {new_group_id}")
                                 except Exception as e:
-                                    print(f"【自动触发】Sector{target_channel}失败: {e}")
+                                    log_callback(f"【自动触发】Sector{target_channel}失败: {e}")
                         
                     else:
                         group_data['status'] = 'failed'
                         group_data['error'] = 'OBS upload failed'
+                        log_callback("OBS upload failed.")
                 except Exception as e:
                     group_data['status'] = 'failed'
                     group_data['error'] = str(e)
+                    log_callback(f"Error during concatenation/upload: {e}")
             else:
                 group_data['status'] = 'failed'
-                group_data['error'] = 'No clips to concatenate'
+                group_data['error'] = 'No videos generated'
+                log_callback("No videos generated.")
             break
         time.sleep(BACKEND_POLL_INTERVAL_SECONDS)
+
+def process_i2v_upload_submission(group_id, file_path, workflow_type):
+    """
+    Background thread to handle Video-to-I2V submission (upload, cut, queue).
+    """
+    def log_callback(msg):
+        if group_id in TASKS_STORE:
+            processed_msg = process_log_message(msg)
+            TASKS_STORE[group_id].setdefault('logs', []).append(f"[{datetime.now().strftime('%H:%M:%S')}] {processed_msg}")
+            print(f"[Video-I2V Group {group_id}] {msg}")
+
+    log_callback(f"Starting Video-to-I2V submission. Workflow: {workflow_type}")
+    
+    filename = os.path.basename(file_path)
+    
+    # 1. Audio Extraction
+    audio_path = os.path.join(UPLOAD_FOLDER, f"original_audio_{group_id}.mp3")
+    try:
+        log_callback("Checking/Extracting audio...")
+        info = ffmpeg_utils.get_video_info(file_path)
+        if info.get('has_audio'):
+            ffmpeg_utils.extract_audio(file_path, audio_path)
+            TASKS_STORE[group_id]['audio_path'] = audio_path
+            log_callback(f"Audio extracted to {audio_path}")
+        else:
+            log_callback("No audio found in video.")
+    except Exception as e:
+        log_callback(f"Failed to extract audio: {e}")
+
+    # 2. Download Character
+    character_url = "http://obs.dimond.top/character.png"
+    character_path = os.path.join(UPLOAD_FOLDER, f"character_for_{filename}.png")
+    try:
+        log_callback(f"Downloading character from {character_url}...")
+        with requests.get(character_url, stream=True) as r:
+            if r.status_code == 200:
+                with open(character_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                log_callback(f"Character downloaded. [IMG:/uploads/{os.path.basename(character_path)}]")
+            else:
+                log_callback(f"Failed to download character: {r.status_code}")
+                TASKS_STORE[group_id]['status'] = 'failed'
+                TASKS_STORE[group_id]['error'] = f"Failed to download character: {r.status_code}"
+                return
+    except Exception as e:
+        log_callback(f"Failed to download character: {e}")
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = str(e)
+        return
+
+    # 3. Cut Video
+    try:
+        resized_video_path = None
+        segment_source_path = file_path
+        if workflow_type == 'anime':
+            resized_video_path = os.path.join(UPLOAD_FOLDER, f"resized_{group_id}.mp4")
+            try:
+                log_callback("Resizing video for anime workflow...")
+                ffmpeg_utils.resize_video(file_path, resized_video_path)
+            except Exception as e:
+                log_callback(f"FFmpeg resize failed: {e}. Falling back to original size.")
+                shutil.copy(file_path, resized_video_path)
+            segment_source_path = resized_video_path
+        
+        info = ffmpeg_utils.get_video_info(segment_source_path)
+        duration = info.get('duration', 0)
+        
+        segment_duration = 4
+        num_segments = math.ceil(duration / segment_duration)
+        
+        log_callback(f"Video duration: {duration}s, segments: {num_segments}")
+        
+        log_callback("Uploading character to ComfyUI...")
+        comfy_char = comfy_utils.client.upload_file(character_path, log_callback=log_callback)
+        if not comfy_char:
+             TASKS_STORE[group_id]['status'] = 'failed'
+             TASKS_STORE[group_id]['error'] = "Failed to upload character"
+             return
+             
+        for i in range(num_segments):
+            start_time = i * segment_duration
+            end_time = min((i + 1) * segment_duration, duration)
+            current_seg_len = end_time - start_time
+            
+            segment_filename = f"segment_{group_id}_{i}.mp4"
+            segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
+            
+            log_callback(f"Cutting segment {i+1}/{num_segments} ({start_time}-{end_time}s)...")
+            ffmpeg_utils.cut_video(segment_source_path, segment_path, start_time, end_time)
+            
+            log_callback(f"Uploading segment {i+1}...")
+            comfy_seg = comfy_utils.client.upload_file(segment_path, log_callback=log_callback)
+            if not comfy_seg:
+                log_callback(f"Failed to upload segment {i+1}")
+                TASKS_STORE[group_id]['status'] = 'failed'
+                TASKS_STORE[group_id]['error'] = "Failed to upload segment"
+                return
+            
+            log_callback(f"Queueing segment {i+1}...")
+            prompt_id, server_address, error = comfy_utils.queue_workflow_template(
+                comfy_char['name'], 
+                comfy_seg['name'], 
+                workflow_type=workflow_type,
+                segment_duration=current_seg_len,
+                log_callback=log_callback
+            )
+            
+            if prompt_id:
+                TASKS_STORE[group_id]['tasks'].append({
+                    'task_id': prompt_id,
+                    'server': server_address,
+                    'status': 'pending',
+                    'segment_index': i,
+                    'result_path': None
+                })
+                log_callback(f"Segment {i+1} queued: {prompt_id}")
+            else:
+                log_callback(f"Failed to submit segment {i}: {error}")
+                TASKS_STORE[group_id]['status'] = 'failed'
+                TASKS_STORE[group_id]['error'] = f"Failed to submit segment {i}: {error}"
+                return
+            
+            # Clean up segment file
+            if os.path.exists(segment_path):
+                os.remove(segment_path)
+
+        if resized_video_path and os.path.exists(resized_video_path):
+            os.remove(resized_video_path)
+            
+        # Clean up original file
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # Clean up character file? Keep for log.
+
+        log_callback("Submission complete. Starting monitor...")
+        monitor_group_task(group_id)
+
+    except Exception as e:
+        log_callback(f"Error in submission: {e}")
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = str(e)
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.route('/upload_and_cut', methods=['POST'])
 def upload_and_cut():
@@ -1432,152 +1608,25 @@ def upload_and_cut():
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(file_path)
     
-    # NEW: Download character from OBS
-    character_url = "http://obs.dimond.top/character.png"
-    character_path = os.path.join(UPLOAD_FOLDER, f"character_for_{filename}.png")
-    
-    try:
-        # Download character
-        with requests.get(character_url, stream=True) as r:
-            if r.status_code == 200:
-                with open(character_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            else:
-                # Fallback to local default if exists? Or fail?
-                # Let's try to fail gracefully
-                return jsonify({'error': f"Failed to download character from {character_url}"}), 500
-    except Exception as e:
-        return jsonify({'error': f"Failed to download character: {e}"}), 500
-    
     group_id = str(uuid.uuid4())
-    
-    # Extract audio immediately
-    audio_path = os.path.join(UPLOAD_FOLDER, f"original_audio_{group_id}.mp3")
-    try:
-        # We need to extract audio using ffmpeg before we do anything else
-        # Or just use the original file if it has audio
-        info = ffmpeg_utils.get_video_info(file_path)
-        if info.get('has_audio'):
-            ffmpeg_utils.extract_audio(file_path, audio_path)
-            has_audio = True
-        else:
-            has_audio = False
-    except Exception as e:
-        print(f"Failed to extract audio: {e}")
-        has_audio = False
-
     TASKS_STORE[group_id] = {
         'status': 'processing',
         'tasks': [],
         'created_at': time.time(),
         'workflow_type': workflow_type,
-        'audio_path': audio_path if has_audio else None
+        'audio_path': None,
+        'logs': [f"[{datetime.now().strftime('%H:%M:%S')}] Task group created. Waiting for submission..."]
     }
     
-    try:
-        resized_video_path = None
-        segment_source_path = file_path
-        if workflow_type == 'anime':
-            resized_video_path = os.path.join(UPLOAD_FOLDER, f"resized_{group_id}.mp4")
-            try:
-                ffmpeg_utils.resize_video(file_path, resized_video_path)
-            except Exception as e:
-                print(f"FFmpeg resize failed: {e}. Falling back to original size.")
-                shutil.copy(file_path, resized_video_path)
-            segment_source_path = resized_video_path
-        
-        info = ffmpeg_utils.get_video_info(segment_source_path)
-        duration = info.get('duration', 0)
-        fps = 20 # Target FPS (ffmpeg command handles this if we add -r)
-        
-        # Calculate segments (4s duration as requested)
-        segment_duration = 4
-        num_segments = math.ceil(duration / segment_duration)
-        
-        print(f"Processing video: {filename}, duration: {duration}s, segments: {num_segments}, workflow: {workflow_type}")
-        
-        for i in range(num_segments):
-            start_time = i * segment_duration
-            end_time = min((i + 1) * segment_duration, duration)
-            current_seg_len = end_time - start_time
+    thread = threading.Thread(target=process_i2v_upload_submission, args=(group_id, file_path, workflow_type))
+    thread.daemon = True
+    thread.start()
             
-            # Generate segment filename
-            segment_filename = f"segment_{group_id}_{i}.mp4"
-            segment_path = os.path.join(UPLOAD_FOLDER, segment_filename)
-            
-            ffmpeg_utils.cut_video(segment_source_path, segment_path, start_time, end_time)
-            
-            # Upload files to ComfyUI
-            comfy_seg = comfy_utils.client.upload_file(segment_path)
-            if not comfy_seg:
-                raise Exception("Failed to upload video segment")
-            
-            comfy_char = comfy_utils.client.upload_file(character_path)
-            if not comfy_char:
-                raise Exception("Failed to upload character")
-                
-            # Submit job with workflow_type
-            prompt_id, server_address, error = comfy_utils.queue_workflow_template(
-                comfy_char['name'], 
-                comfy_seg['name'], 
-                workflow_type=workflow_type,
-                segment_duration=current_seg_len
-            )
-            
-            if prompt_id:
-                TASKS_STORE[group_id]['tasks'].append({
-                    'task_id': prompt_id,
-                    'server': server_address,
-                    'status': 'pending',
-                    'segment_index': i,
-                    'result_path': None
-                })
-            else:
-                TASKS_STORE[group_id]['status'] = 'failed'
-                TASKS_STORE[group_id]['error'] = f"Failed to submit segment {i}: {error}"
-                if resized_video_path and os.path.exists(resized_video_path):
-                    os.remove(resized_video_path)
-                return jsonify({'error': f"Failed to submit segment {i}: {error}"}), 500
-            
-            # Clean up segment file
-            if os.path.exists(segment_path):
-                os.remove(segment_path)
-                
-        if resized_video_path and os.path.exists(resized_video_path):
-            os.remove(resized_video_path)
-            
-        # Clean up original file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        # Clean up downloaded character file
-        if os.path.exists(character_path):
-            os.remove(character_path)
-            
-        # Start background monitor
-        thread = threading.Thread(target=monitor_group_task, args=(group_id,))
-        thread.daemon = True
-        thread.start()
-            
-        return jsonify({
-            'status': 'processing', 
-            'group_id': group_id, 
-            'message': f'Started processing {num_segments} segments'
-        })
-
-    except Exception as e:
-        # Clean up original file if error
-        if 'file_path' in locals() and os.path.exists(file_path):
-            os.remove(file_path)
-        if 'character_path' in locals() and os.path.exists(character_path):
-            os.remove(character_path)
-        if 'resized_video_path' in locals() and resized_video_path and os.path.exists(resized_video_path):
-            os.remove(resized_video_path)
-            
-        TASKS_STORE[group_id]['status'] = 'failed'
-        TASKS_STORE[group_id]['error'] = str(e)
-        return jsonify({'error': str(e)}), 500
+    return jsonify({
+        'status': 'processing', 
+        'group_id': group_id, 
+        'message': 'Started processing video'
+    })
 
 
 @app.route('/upload_transition_video', methods=['POST'])
@@ -1612,9 +1661,118 @@ def check_group_status(group_id):
         'status': group_data.get('status'),
         'final_url': group_data.get('final_url'),
         'error': group_data.get('error'),
-        'progress': f"{len([t for t in group_data['tasks'] if t['status'] == 'completed'])}/{len(group_data['tasks'])}"
+        'progress': f"{len([t for t in group_data['tasks'] if t['status'] == 'completed'])}/{len(group_data['tasks'])}",
+        'logs': group_data.get('logs', [])
     }
     return jsonify(response)
+
+def process_i2v_group_submission(group_id, texts, character_url):
+    """
+    Background thread to handle I2V batch submission.
+    """
+    def log_callback(msg):
+        if group_id in TASKS_STORE:
+            processed_msg = process_log_message(msg)
+            TASKS_STORE[group_id].setdefault('logs', []).append(f"[{datetime.now().strftime('%H:%M:%S')}] {processed_msg}")
+            print(f"[I2V Group {group_id}] {msg}")
+
+    log_callback(f"Starting I2V batch submission for {len(texts)} prompts...")
+    
+    # Download character
+    character_path = os.path.join(UPLOAD_FOLDER, f"i2v_character_{group_id}.png")
+    image_name = None
+    
+    try:
+        log_callback(f"Downloading character from {character_url}...")
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        with requests.get(character_url, stream=True, timeout=30, headers=headers) as r:
+            if r.status_code != 200:
+                log_callback(f"Failed to download character: {r.status_code}")
+                TASKS_STORE[group_id]['status'] = 'failed'
+                TASKS_STORE[group_id]['error'] = f"Failed to download character: {r.status_code}"
+                return
+            with open(character_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        log_callback(f"Character downloaded to {character_path} [IMG:/uploads/{os.path.basename(character_path)}]")
+    except Exception as e:
+        log_callback(f"Error downloading character: {e}")
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = str(e)
+        return
+
+    # Upload to ComfyUI
+    try:
+        log_callback("Uploading character to ComfyUI...")
+        upload_res = comfy_utils.client.upload_file(character_path, log_callback=log_callback)
+        if not upload_res or 'name' not in upload_res:
+            log_callback("Failed to upload character to ComfyUI")
+            TASKS_STORE[group_id]['status'] = 'failed'
+            TASKS_STORE[group_id]['error'] = "Failed to upload character"
+            return
+        image_name = upload_res['name']
+        log_callback(f"Character uploaded as {image_name}")
+    except Exception as e:
+        log_callback(f"Error uploading character: {e}")
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = str(e)
+        return
+
+    # Workflow
+    workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '图生视频video_wan2_2_14B_i2v.json')
+    if not os.path.exists(workflow_path):
+        log_callback("Workflow file not found")
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = "Workflow file not found"
+        return
+
+    # Queue Prompts
+    log_callback("Starting batch queueing...")
+    tasks_created = False
+    
+    for idx, text in enumerate(texts):
+        if not isinstance(text, str): continue
+        prompt_text = text.strip()
+        if not prompt_text: continue
+        
+        log_callback(f"Submitting prompt {idx+1}/{len(texts)}: {prompt_text[:20]}...")
+        
+        try:
+            with open(workflow_path, 'r', encoding='utf-8') as f:
+                workflow = json.load(f)
+            
+            workflow = modify_i2v_workflow(workflow, image_name, prompt_text)
+            
+            prompt_id, server_address = comfy_utils.client.queue_prompt(workflow, log_callback=log_callback)
+            
+            if prompt_id:
+                TASKS_STORE[group_id]['tasks'].append({
+                    'task_id': prompt_id,
+                    'server': server_address,
+                    'status': 'pending',
+                    'segment_index': idx,
+                    'result_path': None,
+                })
+                tasks_created = True
+                log_callback(f"Prompt queued successfully: {prompt_id}")
+            else:
+                log_callback(f"Failed to queue prompt {idx+1}")
+        except Exception as e:
+            log_callback(f"Error processing prompt {idx+1}: {e}")
+            continue
+
+    if not tasks_created:
+        log_callback("No tasks were created. Aborting.")
+        TASKS_STORE[group_id]['status'] = 'failed'
+        TASKS_STORE[group_id]['error'] = "No tasks created"
+        return
+
+    log_callback("Submission complete. Transitioning to monitor...")
+    # Clean up character file? User requested to keep reference frame logic consistent, but here we downloaded it.
+    # The requirement was "download from OBS instead of extracted frame". We did that.
+    # We can delete the local file if we want, but keeping it for logs is better.
+    
+    monitor_i2v_group(group_id)
 
 @app.route('/generate_i2v_group', methods=['POST'])
 def generate_i2v_group():
@@ -1626,29 +1784,9 @@ def generate_i2v_group():
     texts = data.get('texts') or []
     if not isinstance(texts, list) or len(texts) < 4:
         return jsonify({'error': 'texts must be a list of length 4'}), 400
+    
     character_url = "http://obs.dimond.top/character.png"
-    character_path = os.path.join(UPLOAD_FOLDER, f"i2v_character_{uuid.uuid4()}.png")
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        with requests.get(character_url, stream=True, timeout=30, headers=headers) as r:
-            if r.status_code != 200:
-                return jsonify({'error': f'Failed to download character: {r.status_code}'}), 500
-            with open(character_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    try:
-        upload_res = comfy_utils.client.upload_file(character_path)
-        if not upload_res or 'name' not in upload_res:
-            return jsonify({'error': 'Failed to upload character to ComfyUI'}), 500
-        image_name = upload_res['name']
-    finally:
-        if os.path.exists(character_path):
-            os.remove(character_path)
-    workflow_path = os.path.join(os.path.dirname(__file__), 'comfyapi', '图生视频video_wan2_2_14B_i2v.json')
-    if not os.path.exists(workflow_path):
-        return jsonify({'error': 'Workflow file not found'}), 500
+    
     group_id = str(uuid.uuid4())
     TASKS_STORE[group_id] = {
         'status': 'processing',
@@ -1656,31 +1794,13 @@ def generate_i2v_group():
         'created_at': time.time(),
         'workflow_type': 'i2v',
         'audio_path': None,
+        'logs': [f"[{datetime.now().strftime('%H:%M:%S')}] Task group created. Waiting for submission..."]
     }
-    for idx, text in enumerate(texts):
-        if not isinstance(text, str):
-            continue
-        prompt_text = text.strip()
-        if not prompt_text:
-            continue
-        with open(workflow_path, 'r', encoding='utf-8') as f:
-            workflow = json.load(f)
-        workflow = modify_i2v_workflow(workflow, image_name, prompt_text)
-        try:
-            prompt_id, server_address = comfy_utils.client.queue_prompt(workflow)
-        except Exception as e:
-            continue
-        if prompt_id:
-            TASKS_STORE[group_id]['tasks'].append({
-                'task_id': prompt_id,
-                'server': server_address,
-                'status': 'pending',
-                'segment_index': idx,
-                'result_path': None,
-            })
-    thread = threading.Thread(target=monitor_i2v_group, args=(group_id,))
+    
+    thread = threading.Thread(target=process_i2v_group_submission, args=(group_id, texts, character_url))
     thread.daemon = True
     thread.start()
+    
     return jsonify({'status': 'processing', 'group_id': group_id})
 
 def get_latest_file_from_obs(suffix):
@@ -1827,12 +1947,12 @@ def trigger_i2v_for_sector(prompt, image_path, log_callback=None):
         if log_callback: log_callback(f"Uploading reference image to ComfyUI: {image_path}")
         upload_res = comfy_utils.client.upload_file(image_path)
         
-        # Cleanup temporary character file
-        if download_success and os.path.exists(character_path):
-            try:
-                os.remove(character_path)
-            except:
-                pass
+        # Keep character file for log preview
+        # if download_success and os.path.exists(character_path):
+        #    try:
+        #        os.remove(character_path)
+        #    except:
+        #        pass
 
         if not upload_res or 'name' not in upload_res:
              if log_callback: log_callback("Failed to upload reference image to ComfyUI")
@@ -1898,6 +2018,12 @@ def process_log_message(msg):
     """
     Process log message to make paths web-accessible and add image markers.
     """
+    if not isinstance(msg, str):
+        msg = str(msg)
+    
+    # Remove null bytes to prevent browser DOM exceptions
+    msg = msg.replace('\x00', '')
+    
     # Replace UPLOAD_FOLDER with /uploads prefix for web access
     if UPLOAD_FOLDER in msg:
         msg = msg.replace(UPLOAD_FOLDER, '/uploads')
@@ -1947,7 +2073,7 @@ def run_sector17_task(task_id, text, output_dir):
                 log_callback("Task completed successfully.")
                 
                 # Send email notification
-                send_email("Video Analysis (Sector 19) Task Completed", obs_url)
+                send_email("Dialogue Expansion (Sector 17) Task Completed", obs_url)
             else:
                 SECTOR_TASKS[task_id]['status'] = 'failed'
                 SECTOR_TASKS[task_id]['error'] = "Failed to upload to OBS"
@@ -1961,7 +2087,8 @@ def run_sector17_task(task_id, text, output_dir):
             # We might want to keep output_dir for a bit if debugging, but standard logic is remove
             # However, if I2V needs the image, we should check if trigger_i2v_for_sector already uploaded it.
             # trigger_i2v_for_sector uploads it synchronously. So we can delete here.
-            shutil.rmtree(output_dir)
+            # shutil.rmtree(output_dir)
+            pass
         except:
             pass
 
@@ -1974,6 +2101,10 @@ def run_sector19_task(task_id, video_path, output_dir):
         
         # Analyze
         prompt, image_path = extractor_utils.analyze_video(video_path, extractor_utils.RESOURCE_DIR, log_callback=log_callback)
+        
+        # Sanitize prompt
+        if prompt:
+            prompt = prompt.replace('\x00', '')
         
         if prompt.startswith("Error:"):
             SECTOR_TASKS[task_id]['status'] = 'failed'
@@ -1993,11 +2124,42 @@ def run_sector19_task(task_id, video_path, output_dir):
                 log_callback("Prompt saved and uploaded. Triggering I2V...")
                 
                 # Trigger I2V
-                trigger_i2v_for_sector(prompt, image_path, log_callback=log_callback)
+                i2v_group_id = trigger_i2v_for_sector(prompt, image_path, log_callback=log_callback)
                 
-                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
-                SECTOR_TASKS[task_id]['status'] = 'completed'
-                log_callback("Task completed successfully.")
+                if i2v_group_id:
+                    log_callback(f"I2V Task Triggered. Monitoring Group: {i2v_group_id}")
+                    
+                    # Monitor I2V group and forward logs
+                    last_log_index = 0
+                    while True:
+                        group_data = TASKS_STORE.get(i2v_group_id)
+                        if not group_data:
+                            log_callback("I2V Group lost.")
+                            break
+                            
+                        # Forward logs
+                        current_logs = group_data.get('logs', [])
+                        if len(current_logs) > last_log_index:
+                            for log in current_logs[last_log_index:]:
+                                SECTOR_TASKS[task_id]['logs'].append(log)
+                            last_log_index = len(current_logs)
+                            
+                        if group_data.get('status') in ['completed', 'failed']:
+                            if group_data['status'] == 'completed':
+                                SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt, 'i2v_result': group_data.get('final_url')}
+                                SECTOR_TASKS[task_id]['status'] = 'completed'
+                                log_callback("I2V Task Completed.")
+                            else:
+                                SECTOR_TASKS[task_id]['status'] = 'failed'
+                                SECTOR_TASKS[task_id]['error'] = f"I2V Failed: {group_data.get('error')}"
+                                log_callback(f"I2V Task Failed: {group_data.get('error')}")
+                            break
+                        
+                        time.sleep(1)
+                else:
+                    SECTOR_TASKS[task_id]['result'] = {'url': obs_url, 'content': prompt}
+                    SECTOR_TASKS[task_id]['status'] = 'completed'
+                    log_callback("Task completed successfully (I2V trigger failed).")
 
                 # Send email notification
                 send_email("Video Analysis (Sector 19) Task Completed", obs_url)
@@ -2012,9 +2174,10 @@ def run_sector19_task(task_id, video_path, output_dir):
          # Cleanup
         try:
             if os.path.exists(video_path):
-                os.remove(video_path)
-            if os.path.exists(output_dir):
-                shutil.rmtree(output_dir)
+            #     os.remove(video_path)
+            # if os.path.exists(output_dir):
+            #     shutil.rmtree(output_dir)
+                pass
         except:
             pass
 
@@ -2045,23 +2208,39 @@ def sector17_submit():
 
 @app.route('/sector19_submit', methods=['POST'])
 def sector19_submit():
-    if 'video' not in request.files:
-        return jsonify({'error': 'No video file provided'}), 400
-        
-    video_file = request.files['video']
-    if video_file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-        
-    task_id = str(uuid.uuid4())
-    output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
+    task_id = request.form.get('task_id')
     
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # Mode 1: Chunked Upload Finalization
+    if task_id:
+        filename = request.form.get('filename')
+        if not filename:
+             return jsonify({'error': 'Filename required for chunked upload finalization'}), 400
+             
+        output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
+        video_path = os.path.join(output_dir, filename)
         
-    video_path = os.path.join(output_dir, video_file.filename)
-    video_file.save(video_path)
+        if not os.path.exists(video_path):
+             return jsonify({'error': 'File not found (upload failed?)'}), 404
+             
+    # Mode 2: Standard Upload (Legacy/Small files)
+    else:
+        if 'video' not in request.files:
+            return jsonify({'error': 'No video file provided'}), 400
+            
+        video_file = request.files['video']
+        if video_file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+            
+        task_id = str(uuid.uuid4())
+        output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
+        
+        if not os.path.exists(UPLOAD_FOLDER):
+            os.makedirs(UPLOAD_FOLDER)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        video_path = os.path.join(output_dir, video_file.filename)
+        video_file.save(video_path)
     
     SECTOR_TASKS[task_id] = {
         'status': 'processing',
@@ -2073,6 +2252,42 @@ def sector19_submit():
     threading.Thread(target=run_sector19_task, args=(task_id, video_path, output_dir)).start()
     
     return jsonify({'status': 'processing', 'task_id': task_id})
+
+@app.route('/upload_chunk', methods=['POST'])
+def upload_chunk():
+    task_id = request.form.get('task_id')
+    chunk_index = int(request.form.get('chunk_index'))
+    filename = request.form.get('filename')
+    
+    if not task_id or not filename:
+        return jsonify({'error': 'Missing parameters'}), 400
+        
+    if 'file' not in request.files:
+        return jsonify({'error': 'No chunk file provided'}), 400
+        
+    chunk_file = request.files['file']
+    
+    output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        
+    file_path = os.path.join(output_dir, filename)
+    
+    # Append mode
+    mode = 'ab' if chunk_index > 0 else 'wb'
+    
+    try:
+        with open(file_path, mode) as f:
+            chunk_file.save(f) # This might not work with open file handle? 
+            # save() usually takes a path or a file object. 
+            # If passed a file object, Werkzeug writes to it.
+            pass
+    except Exception as e:
+        # Fallback if save() doesn't like file handle
+        with open(file_path, mode) as f:
+            f.write(chunk_file.read())
+            
+    return jsonify({'status': 'success', 'chunk_index': chunk_index})
 
 @app.route('/video_analyzing', methods=['POST'])
 def video_analyzing():
@@ -2130,4 +2345,6 @@ def sector18_get_prompt():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5015)
+    print("Starting Flask server on port 5015...")
+    app.run(host='0.0.0.0', debug=False, port=5015, use_reloader=False)
+
