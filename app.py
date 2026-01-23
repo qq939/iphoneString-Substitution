@@ -101,6 +101,39 @@ GLOBAL_STATE = {
 }
 GLOBAL_STATE_LOCK = threading.Lock()
 
+# Group ID Counter
+GROUP_ID_FILE = 'group_id_counter.txt'
+GROUP_ID_LOCK = threading.Lock()
+
+def get_next_group_id():
+    with GROUP_ID_LOCK:
+        current_id = 0
+        if os.path.exists(GROUP_ID_FILE):
+            try:
+                with open(GROUP_ID_FILE, 'r') as f:
+                    content = f.read().strip()
+                    if content:
+                        current_id = int(content)
+            except:
+                pass
+        next_id = current_id + 1
+        with open(GROUP_ID_FILE, 'w') as f:
+            f.write(str(next_id))
+        return str(next_id)
+
+@app.route('/api/get_group_ids', methods=['GET'])
+def get_group_ids():
+    # Return available groups (keys in TASKS_STORE)
+    groups = list(TASKS_STORE.keys())
+    # Sort: integers numerically, others alphabetically
+    def sort_key(k):
+        if k.isdigit():
+            return (0, int(k))
+        return (1, k)
+    
+    groups.sort(key=sort_key)
+    return jsonify({'groups': groups})
+
 @app.route('/api/sync_state', methods=['GET', 'POST'])
 def sync_state():
     if request.method == 'POST':
@@ -1689,6 +1722,8 @@ def upload_transition_video():
         return jsonify({'error': 'No selected file'}), 400
 
     group_id = request.form.get('group_id') or None
+    if group_id == 'new':
+        group_id = get_next_group_id()
 
     try:
         group_id = _add_transition_video_to_group(file, group_id)
@@ -1832,14 +1867,21 @@ def generate_i2v_group():
     
     character_url = "http://obs.dimond.top/character.png"
     
-    group_id = str(uuid.uuid4())
+    group_id_param = data.get('group_id')
+    if group_id_param == 'new':
+        group_id = get_next_group_id()
+    elif group_id_param:
+        group_id = str(group_id_param)
+    else:
+        group_id = str(uuid.uuid4())
+
     TASKS_STORE[group_id] = {
         'status': 'processing',
         'tasks': [],
         'created_at': time.time(),
         'workflow_type': 'i2v',
         'audio_path': None,
-        'logs': [f"[{datetime.now().strftime('%H:%M:%S')}] Task group created. Waiting for submission..."]
+        'logs': [f"[{datetime.now().strftime('%H:%M:%S')}] Task group created. Group ID: {group_id}"]
     }
     
     thread = threading.Thread(target=process_i2v_group_submission, args=(group_id, texts, character_url))

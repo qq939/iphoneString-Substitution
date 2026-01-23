@@ -170,6 +170,9 @@
             <div class="grid-content">
                 <h2>图生视频</h2>
                 <div class="i2v-container">
+                    <select id="i2vGroupSelect9" class="upload-input" style="width: 100%; margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="text" id="i2vText9" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
                     <button type="button" class="action-btn" onclick="submitI2V(9)">SUBMIT</button>
                 </div>
@@ -183,6 +186,9 @@
             <div class="grid-content">
                 <h2>图生视频</h2>
                 <div class="i2v-container">
+                    <select id="i2vGroupSelect10" class="upload-input" style="width: 100%; margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="text" id="i2vText10" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
                     <button type="button" class="action-btn" onclick="submitI2V(10)">SUBMIT</button>
                 </div>
@@ -197,6 +203,9 @@
             <div class="grid-content">
                 <h2>图生视频</h2>
                 <div class="i2v-container">
+                    <select id="i2vGroupSelect11" class="upload-input" style="width: 100%; margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="text" id="i2vText11" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
                     <button type="button" class="action-btn" onclick="submitI2V(11)">SUBMIT</button>
                 </div>
@@ -210,6 +219,9 @@
             <div class="grid-content">
                 <h2>图生视频</h2>
                 <div class="i2v-container">
+                    <select id="i2vGroupSelect12" class="upload-input" style="width: 100%; margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="text" id="i2vText12" class="upload-input i2v-text-input" placeholder="输入图生视频脚本" style="width: 100%;">
                     <button type="button" class="action-btn" onclick="submitI2V(12)">SUBMIT</button>
                 </div>
@@ -223,6 +235,9 @@
             <div class="grid-content">
                 <h2>视频转场</h2>
                 <form id="transitionForm13" enctype="multipart/form-data">
+                    <select id="transitionGroupSelect13" name="group_id" class="upload-input" style="margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="file" name="video" accept="video/*" class="upload-input">
                     <button type="submit" class="action-btn">SUBMIT</button>
                 </form>
@@ -236,6 +251,9 @@
             <div class="grid-content">
                 <h2>视频转场</h2>
                 <form id="transitionForm14" enctype="multipart/form-data">
+                    <select id="transitionGroupSelect14" name="group_id" class="upload-input" style="margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="file" name="video" accept="video/*" class="upload-input">
                     <button type="submit" class="action-btn">SUBMIT</button>
                 </form>
@@ -249,6 +267,9 @@
             <div class="grid-content">
                 <h2>视频转场</h2>
                 <form id="transitionForm15" enctype="multipart/form-data">
+                    <select id="transitionGroupSelect15" name="group_id" class="upload-input" style="margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="file" name="video" accept="video/*" class="upload-input">
                     <button type="submit" class="action-btn">SUBMIT</button>
                 </form>
@@ -262,6 +283,9 @@
             <div class="grid-content">
                 <h2>视频转场</h2>
                 <form id="transitionForm16" enctype="multipart/form-data">
+                    <select id="transitionGroupSelect16" name="group_id" class="upload-input" style="margin-bottom: 5px;">
+                        <option value="new">New Group (Auto)</option>
+                    </select>
                     <input type="file" name="video" accept="video/*" class="upload-input">
                     <button type="submit" class="action-btn">SUBMIT</button>
                 </form>
@@ -720,25 +744,47 @@
 
         function setGroupId(id) {
             sessionStorage.setItem('transition_group_id', id);
-            updateGroupIdDisplay();
+            syncTransitionDropdowns(id);
         }
 
-        function updateGroupIdDisplay() {
-            var id = getGroupId();
-            // Update display in all transition grids
+        function syncTransitionDropdowns(id) {
+            if (!id) return;
             ['13', '14', '15', '16'].forEach(function(num) {
-                var container = document.querySelector('.grid-item.item-' + num + ' .grid-content');
-                if (container) {
-                    var display = document.getElementById('groupIdDisplay-' + num);
-                    if (display) {
-                        display.remove(); // Remove existing display if any
+                var sel = document.getElementById('transitionGroupSelect' + num);
+                if (sel) {
+                    // Check if option exists, if not, wait for fetch or add it?
+                    // We assume fetchGroupOptions is called when 'new' is used.
+                    // If the id is not in options, setting value won't work.
+                    // But usually we call fetchGroupOptions then setGroupId.
+                    if (sel.value !== id) {
+                        sel.value = id;
                     }
                 }
             });
         }
 
         // Initialize display on load
-        document.addEventListener('DOMContentLoaded', updateGroupIdDisplay);
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait for initial fetch to complete before setting initial value
+            fetchGroupOptions().then(() => {
+                var savedId = getGroupId();
+                if (savedId) {
+                    syncTransitionDropdowns(savedId);
+                }
+            });
+        });
+
+        // Add change listeners to transition dropdowns
+        ['13', '14', '15', '16'].forEach(function(num) {
+            var sel = document.getElementById('transitionGroupSelect' + num);
+            if (sel) {
+                sel.addEventListener('change', function() {
+                    if (this.value !== 'new') {
+                        setGroupId(this.value);
+                    }
+                });
+            }
+        });
 
         var transitionPollTimer = null;
 
@@ -762,17 +808,9 @@
                 var btn = form.querySelector('button[type="submit"]');
                 var formData = new FormData(form);
                 
-                var currentGroupId = getGroupId();
-                if (!currentGroupId) {
-                    currentGroupId = generateUUID();
-                    setGroupId(currentGroupId);
-                    console.log('Generated new Group ID:', currentGroupId);
-                } else {
-                    console.log('Using existing Group ID:', currentGroupId);
-                }
+                var selectEl = form.querySelector('select[name="group_id"]');
+                var selectedId = selectEl ? selectEl.value : 'new';
                 
-                formData.append('group_id', currentGroupId);
-
                 statusDiv.innerText = 'UPLOADING...';
                 if (btn) btn.disabled = true;
                 try {
@@ -783,11 +821,10 @@
                     var data = await resp.json();
                     if (resp.ok) {
                         if (data.group_id) {
-                            // Ensure it matches (it should)
-                            if (data.group_id !== currentGroupId) {
-                                console.warn('Server returned different Group ID:', data.group_id);
-                                setGroupId(data.group_id);
+                            if (selectedId === 'new') {
+                                await fetchGroupOptions();
                             }
+                            setGroupId(data.group_id);
                         }
                         statusDiv.innerText = 'SUBMITTED.';
                         if (getGroupId() && !transitionPollTimer) {
@@ -916,11 +953,51 @@
         updateLatestAudio();
         setInterval(updateLatestAudio, 30000);
 
-        function submitI2V(index) {
+        // Group Options Logic
+        function fetchGroupOptions() {
+            return fetch('/api/get_group_ids')
+                .then(res => res.json())
+                .then(data => {
+                    const groups = data.groups || [];
+                    const ids = [
+                        'i2vGroupSelect9', 'i2vGroupSelect10', 'i2vGroupSelect11', 'i2vGroupSelect12',
+                        'transitionGroupSelect13', 'transitionGroupSelect14', 'transitionGroupSelect15', 'transitionGroupSelect16'
+                    ];
+                    
+                    ids.forEach(id => {
+                        const sel = document.getElementById(id);
+                        if (!sel) return;
+                        if (document.activeElement === sel) return; // Don't update if user is interacting
+                        
+                        const currentVal = sel.value;
+                        // Rebuild options
+                        sel.innerHTML = '<option value="new">New Group (Auto-Inc)</option>';
+                        groups.forEach(g => {
+                            const opt = document.createElement('option');
+                            opt.value = g;
+                            opt.innerText = 'Group ' + g;
+                            sel.appendChild(opt);
+                        });
+                        // Restore selection if valid
+                        if (currentVal && currentVal !== 'new' && groups.includes(currentVal)) {
+                            sel.value = currentVal;
+                        }
+                    });
+                })
+                .catch(e => console.error('Error fetching groups:', e));
+        }
+
+        // Fetch initially and periodically
+        fetchGroupOptions();
+        setInterval(fetchGroupOptions, 10000);
+
+        async function submitI2V(index) {
             const statusDiv = document.getElementById(`i2vStatus${index}`);
             const textInput = document.getElementById(`i2vText${index}`);
+            const selectEl = document.getElementById(`i2vGroupSelect${index}`);
             const text = textInput.value;
             const btn = textInput.parentElement.querySelector('button');
+            const groupId = selectEl ? selectEl.value : 'new';
             
             statusDiv.innerText = 'SUBMITTING...';
             btn.disabled = true;
@@ -928,25 +1005,32 @@
             const texts = ["", "", "", ""];
             texts[index - 9] = text;
             
-            fetch('/generate_i2v_group', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({texts: texts})
-            })
-            .then(res => res.json())
-            .then(data => {
+            try {
+                const res = await fetch('/generate_i2v_group', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({texts: texts, group_id: groupId})
+                });
+                const data = await res.json();
+                
                 if (data.status === 'processing') {
                     statusDiv.innerText = 'PROCESSING...';
+                    if (groupId === 'new') {
+                        await fetchGroupOptions();
+                        // Update this dropdown to the new group ID
+                        if (selectEl && data.group_id) {
+                            selectEl.value = data.group_id;
+                        }
+                    }
                     pollI2V(data.group_id, index);
                 } else {
                     statusDiv.innerText = 'ERROR: ' + (data.error || 'Unknown');
                     btn.disabled = false;
                 }
-            })
-            .catch(e => {
+            } catch (e) {
                 statusDiv.innerText = 'SYSTEM FAILURE: ' + e.message;
                 btn.disabled = false;
-            });
+            }
         }
 
 
