@@ -2436,12 +2436,22 @@ def upload_chunk():
 
 @app.route('/video_analyzing', methods=['POST'])
 def video_analyzing():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
+    # Flexible file upload handler (Adapted from user snippet)
+    video_file = None
+    
+    # 1. Try standard 'file' key
+    if 'file' in request.files:
+        video_file = request.files['file']
         
-    video_file = request.files['file']
-    if video_file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    # 2. If not found or empty, iterate through all form fields to find a file
+    if not video_file or video_file.filename == '':
+        for key, value in request.files.items():
+            if hasattr(value, 'filename') and value.filename:
+                video_file = value
+                break
+                
+    if not video_file or video_file.filename == '':
+        return jsonify({'error': 'No file provided', 'detail': 'Checked all form fields using flexible handler'}), 400
         
     task_id = str(uuid.uuid4())
     output_dir = os.path.join(UPLOAD_FOLDER, f"sector19_{task_id}")
@@ -2468,7 +2478,11 @@ def video_analyzing():
         with GLOBAL_STATE_LOCK:
             GLOBAL_STATE['sector19']['latest_task_id'] = task_id
 
-    return jsonify({'status': 'processing', 'task_id': task_id})
+    return jsonify({
+        'status': 'processing', 
+        'task_id': task_id, 
+        'message': 'Flexible file upload handler is working (Found file: ' + video_file.filename + ')'
+    })
 
 @app.route('/check_sector_task/<task_id>', methods=['GET'])
 def check_sector_task(task_id):
