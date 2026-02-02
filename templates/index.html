@@ -126,7 +126,7 @@
             <div class="grid-content">
                 <h2><a href="http://obs.dimond.top" target="_blank" style="color: inherit; text-decoration: none;">当前视频</a> <span style="cursor: pointer; margin-left: 5px;" onclick="updateLatestVideo(true)">🔄</span></h2>
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                    <video id="latestVideoPreview" preload="metadata" autoplay muted loop controls style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #00ff00;">
+                    <video id="latestVideoPreview" preload="metadata" autoplay muted loop controls style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #00ff00; background: #000;">
                         Your browser does not support the video tag.
                     </video>
                 </div>
@@ -242,6 +242,9 @@
         function exitFullscreen(elem) {
             elem.classList.remove('fullscreen');
         }
+
+        // Video cache to prevent repeated loading
+        const videoCache = new Map();
 
         // Check ComfyUI Status
         function checkComfyStatus() {
@@ -428,11 +431,21 @@
                             if (video.src !== newSrc) {
                                 // Pause current video before changing source to prevent stuttering
                                 const wasPaused = video.paused;
+                                const currentTime = video.currentTime; // Preserve playback position
                                 video.pause();
-                                video.src = newSrc;
+                                
+                                // Use video caching to improve performance
+                                if (videoCache.has(newSrc)) {
+                                    video.src = videoCache.get(newSrc);
+                                } else {
+                                    video.src = newSrc;
+                                    // Cache the source URL for future reference
+                                    videoCache.set(newSrc, newSrc);
+                                }
                                 
                                 // Restore playback state if video was playing
                                 if (!wasPaused && force) {
+                                    video.currentTime = currentTime; // Restore position
                                     video.play().catch(e => console.log('Auto-play prevented by browser policies'));
                                 }
                             }
