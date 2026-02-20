@@ -163,6 +163,9 @@
                 </div>
             </div>
         </div>
+        </div>
+
+        <div class="grid-container page page-2">
         <div class="grid-item item-9">
             <div class="grid-controls">
                 <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
@@ -293,7 +296,7 @@
             </div>
         </div>
         </div>
-        <div class="grid-container page page-2">
+        <div class="grid-container page page-3">
             <div class="grid-item item-17">
                 <div class="grid-controls">
                     <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
@@ -371,6 +374,9 @@
                     <h2>Sector24</h2>
                 </div>
             </div>
+        </div>
+
+        <div class="grid-container page page-4">
             <div class="grid-item item-25">
                 <div class="grid-controls">
                     <button class="control-btn control-btn-full" onclick="goFullscreen(this.closest('.grid-item'))">[FULL]</button>
@@ -444,6 +450,8 @@
     </div>
 
     <script>
+        var videoCache = new Map();
+
         // Fullscreen Logic
         function goFullscreen(elem) {
             elem.classList.add('fullscreen');
@@ -454,7 +462,7 @@
         }
 
         var currentPage = 1;
-        var totalPages = 2;
+        var totalPages = 4;
         var touchStartX = 0;
         var touchEndX = 0;
 
