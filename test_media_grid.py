@@ -1,3 +1,4 @@
+import io
 import os
 import signal
 import json
@@ -69,3 +70,49 @@ def test_grid_layout_is_2x4():
         css = f.read()
     assert "grid-template-columns: repeat(4, 1fr);" in css
     assert "grid-template-rows: repeat(2, 1fr);" in css
+
+
+@timeout(5)
+def test_upload_character_accepts_video_and_generates_character_and_tone():
+    test_client = app.test_client()
+
+    fake_video = io.BytesIO(b"fake video content")
+
+    with patch("app.ffmpeg_utils.get_video_info") as mock_info, \
+        patch("app.ffmpeg_utils.extract_frame") as mock_frame, \
+        patch("app.ffmpeg_utils.run_command") as mock_run_cmd, \
+        patch("app.obs_utils.upload_file") as mock_upload:
+
+        mock_info.return_value = {
+            "duration": 20.0,
+            "width": 1920,
+            "height": 1080,
+            "has_audio": True,
+        }
+
+        def upload_side_effect(file_path, file_name, mime_type=None):
+            if file_name == "character.png":
+                return "http://obs.dimond.top/character.png"
+            if file_name == "tone.wav":
+                return "http://obs.dimond.top/tone.wav"
+            return None
+
+        mock_upload.side_effect = upload_side_effect
+
+        resp = test_client.post(
+            "/upload_character",
+            data={"file": (fake_video, "test.mp4")},
+            content_type="multipart/form-data",
+        )
+
+    assert resp.status_code == 200
+    data = json.loads(resp.data)
+    assert data["status"] == "success"
+    assert data["url"] == "http://obs.dimond.top/character.png"
+    assert data.get("tone_url") == "http://obs.dimond.top/tone.wav"
+    mock_info.assert_called_once()
+    mock_frame.assert_called_once()
+    assert mock_run_cmd.call_count >= 1
+    uploaded_names = {call.args[1] for call in mock_upload.call_args_list}
+    assert "character.png" in uploaded_names
+    assert "tone.wav" in uploaded_names

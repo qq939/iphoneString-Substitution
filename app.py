@@ -421,36 +421,104 @@ def upload_character():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
         
-    # Check extension
     ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-    if ext not in ['jpg', 'jpeg', 'png', 'webp']:
-        return jsonify({'error': 'Invalid file type. Only jpg, png, webp allowed.'}), 400
+    image_exts = ['jpg', 'jpeg', 'png', 'webp']
+    video_exts = ['mp4', 'mov']
+
+    if ext not in image_exts + video_exts:
+        return jsonify({'error': 'Invalid file type. Only image or mp4/mov allowed.'}), 400
 
     try:
-        # Save uploaded file temporarily
-        temp_path = os.path.join(UPLOAD_FOLDER, f"temp_char_{uuid.uuid4()}.{ext}")
-        file.save(temp_path)
-        
-        # Convert to PNG
-        img = Image.open(temp_path)
-        png_filename = "character.png"
-        png_path = os.path.join(UPLOAD_FOLDER, png_filename)
-        img.save(png_path, "PNG")
-        
-        # Upload to OBS
-        obs_url = obs_utils.upload_file(png_path, png_filename, mime_type='image/png')
-        
-        # Clean up
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        if os.path.exists(png_path):
-            os.remove(png_path)
-            
-        if obs_url:
-            return jsonify({'status': 'success', 'url': obs_url, 'message': 'Character updated successfully'})
+        if ext in image_exts:
+            temp_path = os.path.join(UPLOAD_FOLDER, f"temp_char_{uuid.uuid4()}.{ext}")
+            file.save(temp_path)
+
+            img = Image.open(temp_path)
+            png_filename = "character.png"
+            png_path = os.path.join(UPLOAD_FOLDER, png_filename)
+            img.save(png_path, "PNG")
+
+            obs_url = obs_utils.upload_file(png_path, png_filename, mime_type='image/png')
+
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            if os.path.exists(png_path):
+                os.remove(png_path)
+
+            if obs_url:
+                return jsonify({'status': 'success', 'url': obs_url, 'message': 'Character updated successfully'})
+            else:
+                return jsonify({'error': 'Failed to upload to OBS'}), 500
+
+        temp_video_path = os.path.join(UPLOAD_FOLDER, f"temp_char_video_{uuid.uuid4()}.{ext}")
+        file.save(temp_video_path)
+
+        info = ffmpeg_utils.get_video_info(temp_video_path)
+        duration = info.get('duration', 0) or 0
+
+        mid_time = duration / 2.0 if duration and duration > 0 else 0
+        character_path = os.path.join(UPLOAD_FOLDER, "character.png")
+        ffmpeg_utils.extract_frame(temp_video_path, character_path, mid_time)
+
+        segment_duration = 10.0
+        if duration and duration > segment_duration:
+            start_time = max(0.0, (duration - segment_duration) / 2.0)
+            target_duration = segment_duration
         else:
-            return jsonify({'error': 'Failed to upload to OBS'}), 500
-            
+            start_time = 0.0
+            target_duration = segment_duration if not duration else min(segment_duration, duration)
+
+        tone_path = os.path.join(UPLOAD_FOLDER, "tone.wav")
+        cmd = [
+            'ffmpeg',
+            '-y',
+            '-ss',
+            str(start_time),
+            '-i',
+            temp_video_path,
+            '-t',
+            str(target_duration),
+            '-vn',
+            '-acodec',
+            'pcm_s16le',
+            '-ar',
+            '44100',
+            '-ac',
+            '2',
+            tone_path,
+        ]
+        ffmpeg_utils.run_command(cmd)
+
+        character_url = obs_utils.upload_file(character_path, "character.png", mime_type='image/png')
+        tone_url = obs_utils.upload_file(tone_path, "tone.wav", mime_type='audio/wav')
+
+        if os.path.exists(temp_video_path):
+            os.remove(temp_video_path)
+        if os.path.exists(character_path):
+            os.remove(character_path)
+        if os.path.exists(tone_path):
+            os.remove(tone_path)
+
+        if character_url and tone_url:
+            return jsonify(
+                {
+                    'status': 'success',
+                    'url': character_url,
+                    'tone_url': tone_url,
+                    'message': 'Character and tone updated successfully',
+                }
+            )
+        if character_url:
+            return jsonify(
+                {
+                    'status': 'partial_success',
+                    'url': character_url,
+                    'tone_url': tone_url,
+                    'message': 'Character updated, but tone upload failed',
+                }
+            )
+        return jsonify({'error': 'Failed to upload character from video to OBS'}), 500
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2511,4 +2579,3 @@ def sector18_get_prompt():
 if __name__ == '__main__':
     print("Starting Flask server on port 5015...")
     app.run(host='0.0.0.0', debug=False, port=5015, use_reloader=False)
-
