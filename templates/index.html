@@ -499,9 +499,6 @@
             goToPage(currentPage + 1);
         }
 
-        document.querySelector('.page-nav-prev').addEventListener('click', goPrevPage);
-        document.querySelector('.page-nav-next').addEventListener('click', goNextPage);
-
         document.addEventListener('touchstart', function (e) {
             if (e.touches.length === 1) {
                 touchStartX = e.touches[0].clientX;
@@ -956,13 +953,13 @@
 
         // Fetch latest audio for Grid 10
         function updateLatestAudio(force = false) {
-            fetch('/latest_audio')
+            return fetch('/latest_audio')
                 .then(response => response.json())
                 .then(data => {
                     if (data.url) {
                         const audio = document.getElementById('latestAudioPreview');
                         const nameDiv = document.getElementById('latestAudioName');
-                        // Only update if source changed
+                        if (!audio) return;
                         if (force || !audio.src.includes(data.url)) {
                             const newSrc = force ? data.url + "?t=" + new Date().getTime() : data.url;
                             if (audio.src !== newSrc) {
@@ -1488,6 +1485,19 @@
         document.addEventListener('DOMContentLoaded', () => {
             restoreState();
             setInterval(restoreState, 2000); // Poll for sync updates every 2s
+
+            const audioPreview = document.getElementById('latestAudioPreview');
+            if (audioPreview) {
+                audioPreview.addEventListener('click', () => {
+                    if (!audioPreview.src) {
+                        updateLatestAudio(true).then(() => {
+                            if (audioPreview.src) {
+                                audioPreview.play().catch(() => {});
+                            }
+                        });
+                    }
+                });
+            }
 
             // Sector 7 Input
             const audioInput = document.querySelector('#audioUploadForm input[name="text"]');
