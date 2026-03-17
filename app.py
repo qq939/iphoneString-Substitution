@@ -301,9 +301,34 @@ def modify_audio_workflow(workflow, text, filename, emotions=None):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        text = request.form.get('text')
+        # 首先尝试获取 JSON 数据（用于字符串替换）
+        json_data = None
+        text = None
+        try:
+            json_data = request.get_json(force=True)
+            if json_data:
+                text = json_data.get('text', '')
+        except:
+            pass
+        
+        # 如果没有 JSON 数据，尝试表单数据
+        if not text:
+            text = request.form.get('text')
+        
         action = request.form.get('action')
         
+        # 如果有 text 参数且没有 action，则是字符串替换请求
+        if text and not action:
+            # 执行字符串替换
+            text = core_replace(text)
+            # 返回替换后的纯文本
+            return Response(
+                response=text,
+                status=200,
+                mimetype='text/plain; charset=utf-8'
+            )
+        
+        # 否则处理添加/删除替换字符
         if text:
             # 取第一个字符
             char = text[0]
