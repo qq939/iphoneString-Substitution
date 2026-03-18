@@ -342,6 +342,18 @@ def index():
     return render_template('index.html', substitutions=substitutions)
 
 def core_replace(text):
+    # ========== 端口替换配置 ==========
+    # 格式: {"old_port": "new_port"}
+    port_mapping = {
+        "192.168.0.209:7860": "192.168.0.209:7890",
+        "192.168.0.210:7860": "192.168.0.210:7890",
+        "192.168.50.210:7860": "192.168.50.210:7890",
+    }
+    
+    # 替换端口
+    for old_port, new_port in port_mapping.items():
+        text = text.replace(old_port, new_port)
+    
     # ========== 直接硬编码替换字符串，写在这里 ==========
     hard_encoded = ["登录领番茄.*", 
                     "继续播放.*",
