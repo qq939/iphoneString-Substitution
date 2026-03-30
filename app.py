@@ -317,27 +317,31 @@ def index():
         
         action = request.form.get('action')
         
-        # 如果有 text 参数且没有 action，则是字符串替换请求
-        if text and not action:
-            # 执行字符串替换
+        # 如果有 text 参数，则是字符串替换请求
+        if text:
+            # 取第一个字符用于 add/remove 替换规则
+            char = text[0]
+            if action == 'add':
+                save_substitution(char)
+            elif action == 'remove':
+                remove_substitution(char)
+            
+            # 执行字符串替换，只返回替换后的纯文本内容
             text = core_replace(text)
-            # 返回替换后的纯文本
             return Response(
                 response=text,
                 status=200,
                 mimetype='text/plain; charset=utf-8'
             )
         
-        # 否则处理添加/删除替换字符
-        if text:
-            # 取第一个字符
-            char = text[0]
-            if action == 'add':
-                save_substitution(char)
-            elif action == 'remove':
-                remove_substitution(char)
-        return redirect(url_for('index'))
+        # 无 text 参数时，返回空文本
+        return Response(
+            response="",
+            status=200,
+            mimetype='text/plain; charset=utf-8'
+        )
     
+    # GET 请求保持原有逻辑（返回网页）
     substitutions = get_substitutions()
     return render_template('index.html', substitutions=substitutions)
 
